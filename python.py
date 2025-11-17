@@ -4,71 +4,19 @@ import termios
 import time
 import select
 import tty
+import random
 
-# World 1 
+# --- GAME STATE ---
 world = 1
 timea = 0.0
-
 money = 0
 rate = 1
 adminmultiplier = 10.0
 othermultiplier = 1.0
-
-page = 0  # 0 = upgrades, 1 = research
-
-# --- RESEARCH PAGE FLAG ---
+page = 0
 research_page_unlocked = False
-
-map_art = r"""
-                 N
-                 ^
-                 |
-         ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~
- River Bend ---> |                   /\
-             ~ ~ | ~ ~ ~   /\  /\   /  \         /\    /\ 
-                 |        /  \/  \_/    \  /\   /  \  /  \
-  ~ ~ ~ ~ ~ ~ ~  |  ~ ~  /                \/  \_/    \/    \
-  ~    Fisher's  |      /   HILLS &                     MOUNTAIN
-        Dock     |     /     RIDGES                         ^
-                 |    /                                        \
-   ~ ~ ~ ~ ~ ~ ~  |   /                                          \
-                 _|__/____    ________   ____   ____   ____   ____\__
-                /       /|  /  FARM  /| /CAST/ /MARK/ /RUIN/ /TOWN/ / |
-               / Field / | /-------/ |/_____/ /____/ /____/ /____/ /  |
-              /_______/  | | Barn |  |  ____  ____  ____  ____  |   | |
-              |  Orchard|/  |______| /| /____/ /____/ /____/ /____|   | |
-              |  (apple)    ________ /                           |   | |
-              |            /  MILL  /        ROAD -->====>======/___|_|
-              |___________/_______ /   BRIDGE                     |
-                     |        ||                                   |
-                     |   ~~~~~||~~~~~        Main Street           |
-                     |   ~~~~~||~~~~~  [Town Square] (market)      |
-                     |        ||                                   |
-     FOREST  /\  /\  |  /\    ||     /\    /\    /\   /\    /\     |
-           /  \/  \  | /  \   ||    /  \  /  \  /  \ /  \  /  \    |
-          /        \ |/    \  ||   /    \/    \/    \/    \/    \   |
-         /  WILD WOODS\     \ ||  /   Woodland Path (to ruins) \  |
-        /  (deer, owls) \    \|| /                                \ |
-       /________________\    \|/      ╔══════════════════════════╗\|
-                             \        ║      GRAVEYARD          ║ \
-                              \       ║  XXXX  X  XX   X  XX   X ║  \
-                               \      ║  X  X  XXXX   X  XX   X  ║   \
-                                \     ║  XX   X X    XX   X  XXX ║    \
-                                 \    ║  Old stones, willow     ║     \
-                                  \   ║  lantern, broken gate   ║      \
-                                   \  ╚════════════════════════╝       \
-                                    \                                 \
-                                     \           +----+                 \
-                                      \          |CAVE| <- entrance      \
-                                       \         +----+                  \
-                                        \                                \
-                                         \        MARSHLAND  ~ ~ ~ ~      \
-                                          \      ~ ~ ~ ~ ~ ~ ~ ~ ~ ~       \
-                                           \                            /
-                                            \                          /
-                                             \________________________/
-
-"""
+w1upgrades = 0
+length = 40
 
 # --- UPGRADE DATA ---
 upgrades = [
@@ -77,17 +25,14 @@ upgrades = [
     {"key": "s", "name": "Hire Manager", "rate_inc": 10, "base_cost": 100,
      "cost": 100, "multiplier": 1.15, "count": 0, "max": 75, "seen": False},
     {"key": "d", "name": "Hire Senior Manager", "rate_inc": 100,
-     "base_cost": 1000, "cost": 1000, "multiplier": 1.15, "count": 0,
-     "max": 50, "seen": False},
+     "base_cost": 1000, "cost": 1000, "multiplier": 1.15, "count": 0, "max": 50, "seen": False},
     {"key": "f", "name": "Upgrade Hardware", "rate_inc": 10000,
-     "base_cost": 10000, "cost": 10000, "multiplier": 1.15, "count": 0,
-     "max": 30, "seen": False},
+     "base_cost": 10000, "cost": 10000, "multiplier": 1.15, "count": 0, "max": 30, "seen": False},
     {"key": "g", "name": "Unlock Research", "rate_inc": 0,
-     "base_cost": 1000000, "cost": 1000000, "multiplier": 0, "count": 0,
-     "max": 1, "seen": False},
+     "base_cost": 1000000, "cost": 1000000, "multiplier": 0, "count": 0, "seen": False},
 ]
 
-# --- RESEARCH PAGE DATA ---
+# --- RESEARCH DATA ---
 research = [
     {"key": "1", "name": "Boost Admin Systems",
      "cost": 500000, "purchased": False,
@@ -97,15 +42,100 @@ research = [
      "effect": "othermultiplier *= 2"},
 ]
 
-# --- WORLD 1 DATA ---
-w1upgrades = 0
-max_w1upgrades = 20
-length = 40
+# --- CITY DATA ---
+
+city_buildings = []
+
+def generate_city_layout():
+    """Generate static city layout (types, widths, positions, random offsets) once."""
+    global city_buildings
+    num_buildings = 25
+    types = ["house", "factory", "tower", "skyscraper", "dome", "antenna", "villa"]
+    mid = num_buildings // 2
+
+    city_buildings = []
+    for i in range(num_buildings):
+        width = 1 + (mid - abs(i - mid)) // 2  # wider in middle
+        b_type = random.choice(types)
+        # Assign a fixed random offset for natural variance
+        offset = random.randint(0, 2)
+        city_buildings.append({
+            "width": width,
+            "type": b_type,
+            "base": 1,
+            "height": 1,
+            "pos": i,
+            "mid_offset": abs(i - mid),
+            "rand_offset": offset
+        })
+
+def update_building_heights(upgrades):
+    """Grow building heights toward the middle based on upgrades."""
+    max_height = 15
+    for b in city_buildings:
+        pyramid_height = int(upgrades / 2 / (b["mid_offset"] + 1)) + 1
+        # Use the pre-generated offset, no new randomness
+        b["height"] = min(max_height, pyramid_height + b["rand_offset"])
 
 
+def update_building_heights(upgrades):
+    """Grow building heights toward the middle based on total upgrades."""
+    max_height = 15
+    for b in city_buildings:
+        # pyramid base toward center
+        pyramid_height = int(upgrades / 2 / (b["mid_offset"] + 1)) + 1
+        # add small random offset for natural variance
+        random_offset = random.randint(0, 2)
+        b["height"] = min(max_height, pyramid_height + random_offset)
+
+def draw_city():
+    """Draw the pre-generated city with updated heights."""
+    width = 100
+    max_height = 15
+    spacing = 1
+
+    # Clouds
+    cloud_line = "".join("☁" if random.random() > 0.85 else " " for _ in range(width))
+    print(cloud_line)
+    print("")
+
+    # Draw skyline
+    for y in reversed(range(max_height)):
+        line = ""
+        for b in city_buildings:
+            b_height = b["height"]
+            b_width = b["width"]
+            b_type = b["type"]
+
+            if y < b_height:
+                if b_type == "house" and y == b_height - 1:
+                    line += "▲" * b_width
+                elif b_type == "dome" and y == b_height - 1:
+                    line += "◯" * b_width
+                elif b_type == "antenna" and y == b_height - 1:
+                    line += "│" * b_width
+                else:
+                    if b_type == "skyscraper":
+                        line += "█" * b_width
+                    elif b_type == "factory":
+                        line += "▒" * b_width
+                    elif b_type == "tower":
+                        line += "▌" * b_width
+                    elif b_type == "villa":
+                        line += "▓" * b_width
+                    else:
+                        line += "█" * b_width
+            else:
+                line += " " * b_width
+            line += " " * spacing
+        print(line.center(width))
+
+    # Ground
+    print("_" * width)
+
+# --- INPUT / CLEAR ---
 def clear():
-    os.system("clear")
-
+    os.system("cls" if os.name == "nt" else "clear")
 
 def get_key():
     dr, _, _ = select.select([sys.stdin], [], [], 0)
@@ -113,46 +143,33 @@ def get_key():
         return sys.stdin.read(1)
     return None
 
-
-# --- BUY UPGRADE FUNCTION ---
+# --- BUY FUNCTIONS ---
 def buy_upgrade(upg):
     global money, rate, w1upgrades, research_page_unlocked
-
-    if upg["count"] >= upg["max"]:
-        return
-
-    if money < upg["cost"]:
-        return
-
+    if upg["count"] >= upg["max"]: return
+    if money < upg["cost"]: return
     money -= upg["cost"]
     rate += upg["rate_inc"]
     upg["count"] += 1
     w1upgrades += 1
-
     if upg["name"] == "Unlock Research":
         research_page_unlocked = True
-
     if upg["count"] < upg["max"]:
         upg["cost"] = int(upg["cost"] * upg["multiplier"])
 
-
-# --- BUY RESEARCH FUNCTION ---
 def buy_research(res):
     global money, adminmultiplier, othermultiplier
-
-    if res["purchased"]:
-        return
-
-    if money < res["cost"]:
-        return
-
+    if res["purchased"]: return
+    if money < res["cost"]: return
     money -= res["cost"]
     res["purchased"] = True
     exec(res["effect"], globals())
 
-
+# --- MAIN LOOP ---
 def main():
-    global world, timea, money, page
+    global world, timea, money, page, w1upgrades
+
+    generate_city_layout()  # generate static layout once
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -163,101 +180,65 @@ def main():
             key = get_key()
             clear()
 
-            # --- WORLD 1 LOGIC ---
             if world == 1:
-                global w1upgrades, max_w1upgrades, length
                 timea += 0.1
                 if timea >= 1:
                     money += rate * adminmultiplier * othermultiplier
                     timea = 0.0
 
-                print(f"Money: {money:.2f}")
-                if page == 0:
-                    print("=== UPGRADES ===")
-                elif page == 1:
-                    print("=== RESEARCH ===")
-                print()
+                print(f"Money: {money:.2f}\n")
 
-                # ======================
-                # PAGE 0 — UPGRADES
-                # ======================
+                update_building_heights(w1upgrades)
+                draw_city()
+
+                print("\n=== UPGRADES ===" if page == 0 else "\n=== RESEARCH ===")
+
                 if page == 0:
                     any_seen = False
                     for upg in upgrades:
-                        if money >= upg["cost"] * 0.1:
+                        if money >= upg.get("cost",0) * 0.1:
                             upg["seen"] = True
-                        if upg["seen"]:
+                        if upg.get("seen", False):
                             any_seen = True
-                            if upg["count"] < upg["max"]:
-                                print(
-                                    f"[{upg['key'].upper()}] {upg['name']} "
-                                    f"({upg['count']}/{upg['max']}) "
-                                    f"+{upg['rate_inc']}/sec | Cost: ${upg['cost']}"
-                                )
-                            else:
-                                print(
-                                    f"[{upg['key'].upper()}] {upg['name']} "
-                                    f"({upg['count']}/{upg['max']}) MAXED"
-                                )
-
+                            status = f"+{upg.get('rate_inc',0)}/sec | Cost: ${upg.get('cost',0)}" \
+                                if upg.get("count",0) < upg.get("max",100) else "MAXED"
+                            print(f"[{upg.get('key','?').upper()}] {upg.get('name','Unknown')} "
+                                f"({upg.get('count',0)}/{upg.get('max',100)}) {status}")
                     if not any_seen:
                         print("(No upgrades available yet...)")
 
-                # ======================
-                # PAGE 1 — RESEARCH
-                # ======================
                 elif page == 1:
                     if not research_page_unlocked:
                         print("Research not unlocked yet.")
                     else:
                         for res in research:
-                            if res["purchased"]:
-                                print(f"[{res['key']}] {res['name']} — COMPLETED")
-                            else:
-                                print(f"[{res['key']}] {res['name']} | Cost: ${res['cost']}")
+                            status = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
+                            print(f"[{res['key']}] {res['name']} {status}")
 
                 if research_page_unlocked:
                     print("\nPress [R] to switch pages.")
-                # BAR
-                sanity = max_w1upgrades - w1upgrades
-                bar = int((sanity / max_w1upgrades) * length)
+
+                # Upgrade bar at the bottom
+                sanity = 20 - w1upgrades
+                bar = int((sanity / 20) * length)
                 empty = length - bar
                 print("\n[" + "#" * bar + " " * empty + "]\n")
 
-            # --- WORLD 2 LOGIC ---
-            elif world == 2:
-                print("=== WORLD 2 ===")
-                print("Nothing happens here yet.")
-                print(map_art)
-
-            # --- INPUT ---  <--- Moved out so it's executed regardless of world
             if key:
                 k = key.lower()
-
-                # Switch worlds
                 if k == 'k':
                     world = 2 if world == 1 else 1
-
-                # Quit
                 elif k == 'q':
                     break
-
-                # Page switching (only if research is unlocked and we're in world 1)
-                elif k == 'r' and world == 1:
-                    if research_page_unlocked:
-                        page = (page + 1) % 2
-                    else:
-                        page = 0
-                    continue
-
-                # WORLD 1 INPUT
-                if world == 1:
+                elif k == 'r' and world == 1 and research_page_unlocked:
+                    page = (page + 1) % 2
+                elif world == 1:
                     if page == 0:
                         for upg in upgrades:
                             if k == upg["key"]:
                                 buy_upgrade(upg)
                                 break
-                    elif page == 1 and research_page_unlocked:
+                    elif page == 1:
                         for res in research:
                             if k == res["key"]:
                                 buy_research(res)
@@ -270,7 +251,8 @@ def main():
         clear()
         print("Exited cleanly.")
 
-
-
 if __name__ == "__main__":
     main()
+
+
+AHAHAHAHAH
