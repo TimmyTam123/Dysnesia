@@ -128,12 +128,14 @@ def generate_city_layout():
             "rand_offset": offset
         })
 
+
 def update_building_heights(upgrades):
     """Grow building heights toward the middle based on total upgrades, preserving random offsets."""
     max_height = 15
     for b in city_buildings:
         pyramid_height = int(upgrades / 2 / (b["mid_offset"] + 1)) + 1
         b["height"] = min(max_height, pyramid_height + b["rand_offset"])
+
 
 def draw_city():
     width = 100
