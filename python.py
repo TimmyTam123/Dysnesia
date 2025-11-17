@@ -5,6 +5,7 @@ import time
 import select
 import tty
 
+# World 1 
 world = 1
 timea = 0.0
 
@@ -176,6 +177,7 @@ def main():
             elif world == 2:
                 print("=== WORLD 2 ===")
                 print("Nothing happens here yet.")
+                print("")
 
             # --- INPUT ---  <--- Moved out so it's executed regardless of world
             if key:
