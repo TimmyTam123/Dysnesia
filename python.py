@@ -19,6 +19,57 @@ page = 0  # 0 = upgrades, 1 = research
 # --- RESEARCH PAGE FLAG ---
 research_page_unlocked = False
 
+map_art = r"""
+                 N
+                 ^
+                 |
+         ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~
+ River Bend ---> |                   /\
+             ~ ~ | ~ ~ ~   /\  /\   /  \         /\    /\ 
+                 |        /  \/  \_/    \  /\   /  \  /  \
+  ~ ~ ~ ~ ~ ~ ~  |  ~ ~  /                \/  \_/    \/    \
+  ~    Fisher's  |      /   HILLS &                     MOUNTAIN
+        Dock     |     /     RIDGES                         ^
+                 |    /                                        \
+   ~ ~ ~ ~ ~ ~ ~  |   /                                          \
+                 _|__/____    ________   ____   ____   ____   ____\__
+                /       /|  /  FARM  /| /CAST/ /MARK/ /RUIN/ /TOWN/ / |
+               / Field / | /-------/ |/_____/ /____/ /____/ /____/ /  |
+              /_______/  | | Barn |  |  ____  ____  ____  ____  |   | |
+              |  Orchard|/  |______| /| /____/ /____/ /____/ /____|   | |
+              |  (apple)    ________ /                           |   | |
+              |            /  MILL  /        ROAD -->====>======/___|_|
+              |___________/_______ /   BRIDGE                     |
+                     |        ||                                   |
+                     |   ~~~~~||~~~~~        Main Street           |
+                     |   ~~~~~||~~~~~  [Town Square] (market)      |
+                     |        ||                                   |
+     FOREST  /\  /\  |  /\    ||     /\    /\    /\   /\    /\     |
+           /  \/  \  | /  \   ||    /  \  /  \  /  \ /  \  /  \    |
+          /        \ |/    \  ||   /    \/    \/    \/    \/    \   |
+         /  WILD WOODS\     \ ||  /   Woodland Path (to ruins) \  |
+        /  (deer, owls) \    \|| /                                \ |
+       /________________\    \|/      ╔══════════════════════════╗\|
+                             \        ║      GRAVEYARD          ║ \
+                              \       ║  XXXX  X  XX   X  XX   X ║  \
+                               \      ║  X  X  XXXX   X  XX   X  ║   \
+                                \     ║  XX   X X    XX   X  XXX ║    \
+                                 \    ║  Old stones, willow     ║     \
+                                  \   ║  lantern, broken gate   ║      \
+                                   \  ╚════════════════════════╝       \
+                                    \                                 \
+                                     \           +----+                 \
+                                      \          |CAVE| <- entrance      \
+                                       \         +----+                  \
+                                        \                                \
+                                         \        MARSHLAND  ~ ~ ~ ~      \
+                                          \      ~ ~ ~ ~ ~ ~ ~ ~ ~ ~       \
+                                           \                            /
+                                            \                          /
+                                             \________________________/
+
+"""
+
 # --- UPGRADE DATA ---
 upgrades = [
     {"key": "a", "name": "Hire Worker", "rate_inc": 1, "base_cost": 10,
@@ -177,7 +228,7 @@ def main():
             elif world == 2:
                 print("=== WORLD 2 ===")
                 print("Nothing happens here yet.")
-                print("")
+                print(map_art)
 
             # --- INPUT ---  <--- Moved out so it's executed regardless of world
             if key:
