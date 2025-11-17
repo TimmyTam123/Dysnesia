@@ -10,14 +10,26 @@ timea = 0.0
 
 money = 0
 rate = 1
-adminmultiplier = 1.0
+adminmultiplier = 5000
 othermultiplier = 1.0
 
 # --- UPGRADE DATA ---
 upgrades = [
-    {"key": "a", "name": "Upg1", "rate_inc": 1, "base_cost": 10, "cost": 10,
-     "multiplier": 1.15, "count": 0, "max": 100},
+    {"key": "a", "name": "Hire Worker", "rate_inc": 1, "base_cost": 10,
+     "cost": 10, "multiplier": 1.15, "count": 0, "max": 100, "seen": False},
+    {"key": "s", "name": "Hire Manager", "rate_inc": 10, "base_cost": 100,
+     "cost": 100, "multiplier": 1.15, "count": 0, "max": 100, "seen": False},
+    {"key": "d", "name": "Hire Senior Manager", "rate_inc": 100,
+     "base_cost": 1000, "cost": 1000, "multiplier": 1.15, "count": 0,
+     "max": 100, "seen": False},
+    {"key": "f", "name": "Upgrade Hardware", "rate_inc": 10000,
+     "base_cost": 10000, "cost": 10000, "multiplier": 1.15, "count": 0,
+     "max": 100, "seen": False},
+    {"key": "g", "name": "Unlock Research", "rate_inc": 0,
+     "base_cost": 1000000, "cost": 1000000, "multiplier": 0, "count": 0,
+     "max": 1, "seen": False},
 ]
+
 
 # --- WORLD 1 DATA ---
 w1upgrades = 0
@@ -82,10 +94,12 @@ def main():
                 print(line1.format(money=money))
 
                 # --- UPGRADE DISPLAY ---
-                visible = False
+                any_seen = False
                 for upg in upgrades:
                     if money >= upg["cost"] * 0.1:
-                        visible = True
+                        upg["seen"] = True
+                    if upg["seen"]:
+                        any_seen = True
                         if upg["count"] < upg["max"]:
                             print(
                                 f"[{upg['key'].upper()}] {upg['name']} "
@@ -98,8 +112,12 @@ def main():
                                 f"({upg['count']}/{upg['max']}) MAXED"
                             )
 
-                if not visible:
+                if not any_seen:
                     print("(No upgrades available yet...)")
+
+
+                #Ascii art
+
 
                 # BAR
                 sanity = max_w1upgrades - w1upgrades
