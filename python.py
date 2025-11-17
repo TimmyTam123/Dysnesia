@@ -205,6 +205,36 @@ def buy_research(res):
     exec(res["effect"], globals())
 
 
+def draw_research_tree():
+    """Render a 10-node boxed research tree with || connectors and completion marks."""
+    # Convert your research list into 10 nodes
+    # If fewer than 10 exist, pad them
+    nodes = []
+    for i in range(10):
+        if i < len(research):
+            r = research[i]
+            mark = "X" if r["purchased"] else " "
+            nodes.append(f"[R{i+1}:{mark}]")
+        else:
+            nodes.append(f"[R{i+1}: ]")
+
+    # Build tree layout (square aesthetic, double vertical lines)
+    tree = f"""
+                     ┌────────{nodes[0]}────────┐
+                     ||                        ||
+          ┌────────{nodes[1]}────────┐   ┌────────{nodes[2]}────────┐
+          ||                        ||   ||                        ||
+    ┌────{nodes[3]}────┐   ┌────{nodes[4]}────┐   ┌────{nodes[5]}────┐   ┌────{nodes[6]}────┐
+    ||                ||   ||                ||   ||                ||   ||                ||
+                ┌────{nodes[7]}────┐                 ┌────{nodes[8]}────┐
+                ||                ||                 ||                ||
+                                   -----{nodes[9]}────
+
+    """
+
+    print(tree)
+
+
 # --- MAIN LOOP ---
 def main():
     global world, timea, money, page, w1upgrades
@@ -240,10 +270,10 @@ def main():
                             upg["seen"] = True
                         if upg.get("seen", False):
                             any_seen = True
-                            status = f"+{upg.get('rate_inc',0)}/sec | Cost: ${upg.get('cost',0)}" \
-                                if upg.get("count",0) < upg.get("max",100) else "MAXED"
-                            print(f"[{upg.get('key','?').upper()}] {upg.get('name','Unknown')} "
-                                f"({upg.get('count',0)}/{upg.get('max',100)}) {status}")
+                            status = f"+{upg.get('rate_inc',0)}/sec | Cost: ${upg.get('cost', 0)}" \
+                                if upg.get("count", 0) < upg.get("max",100) else "MAXED"
+                            print(f"[{upg.get('key', '?').upper()}] {upg.get('name', 'Unknown')} "
+                                f"({upg.get('count', 0)}/{upg.get('max',100)}) {status}")
                     if not any_seen:
                         print("(No upgrades available yet...)")
 
@@ -251,9 +281,12 @@ def main():
                     if not research_page_unlocked:
                         print("Research not unlocked yet.")
                     else:
+                        draw_research_tree()
+                        print("\nResearch Keys:")
                         for res in research:
                             status = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
-                            print(f"[{res['key']}] {res['name']} {status}")
+                            print(f"[{res['key']}] Research {res['key']} {status}")
+
 
                 if research_page_unlocked:
                     print("\nPress [R] to switch pages.")
