@@ -101,16 +101,20 @@ def generate_city_layout():
     global city_buildings
     num_buildings = 25
     types = [
-        {"name": "house", "roof": "▲", "body": "█"},
-        {"name": "factory", "roof": "■", "body": "▒"},
-        {"name": "tower", "roof": "▲", "body": "▌"},
+        {"name": "house",      "roof": "▲", "body": "▓"},
+        {"name": "factory",    "roof": "■", "body": "▒"},
+        {"name": "tower",      "roof": "▲", "body": "▌"},
         {"name": "skyscraper", "roof": "■", "body": "█"},
-        {"name": "dome", "roof": "◯", "body": "█"},
-        {"name": "antenna", "roof": "│", "body": "█"},
-        {"name": "villa", "roof": "♢", "body": "▓"},
-        {"name": "castle", "roof": "♜", "body": "█"},
-        {"name": "tent", "roof": "△", "body": "▒"}
+        {"name": "dome",       "roof": "◯", "body": "░"},
+        {"name": "antenna",    "roof": "│", "body": "┃"},
+        {"name": "villa",      "roof": "♢", "body": "▒"},
+        {"name": "castle",     "roof": "♜", "body": "█"},
+        {"name": "tent",       "roof": "△", "body": "┼"},
+        {"name": "hut",        "roof": "⌂", "body": "▖"},
+        {"name": "spire",      "roof": "†", "body": "▚"},
+        {"name": "mall",       "roof": "▀", "body": "▤"},
     ]
+
     mid = num_buildings // 2
 
     city_buildings = []
@@ -223,11 +227,11 @@ def draw_research_tree():
                      ┌────────{nodes[0]}────────┐
                      ||                        ||
           ┌────────{nodes[1]}────────┐   ┌────────{nodes[2]}────────┐
-          ||                        ||   ||                        ||
+          ||                      ||   ||                        ||
           {nodes[3]}────┐   ┌────{nodes[4]}               {nodes[5]}─  
                        ||   ||                               || 
                        {nodes[7]}────┐                 ┌──{nodes[8]}
-                                      ß---{nodes[9]}────
+                                      ---{nodes[9]}────
 
     """
 
@@ -281,7 +285,7 @@ def main():
                         print("Research not unlocked yet.")
                     else:
                         draw_research_tree()
-                        print("\nResearch Keys:")
+                        print("Research Keys:")
                         for res in research:
                             status = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
                             print(f"[{res['key']}] Research {res['key']} {status}")
@@ -322,6 +326,7 @@ def main():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         clear()
         print("Exited cleanly.")
+
 
 if __name__ == "__main__":
     main()
