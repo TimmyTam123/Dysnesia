@@ -110,7 +110,7 @@ def generate_city_layout():
         {"name": "villa",      "roof": "♢", "body": "▒"},
         {"name": "castle",     "roof": "♜", "body": "█"},
         {"name": "tent",       "roof": "△", "body": "┼"},
-        {"name": "hut",        "roof": "⌂", "body": "▖"},
+        {"name": "hut",        "roof": "⌂", "body": "♦"},
         {"name": "spire",      "roof": "†", "body": "▚"},
         {"name": "mall",       "roof": "▀", "body": "▤"},
     ]
