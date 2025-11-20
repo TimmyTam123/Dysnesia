@@ -240,6 +240,7 @@ def locate_labels_in_map(map_text):
             labels["cave"] = (i, col)
     return labels, lines
 
+
 def make_absolute_zones(map_lines, map_top_row):
     """Given map_lines and top row where the map starts on the terminal, produce absolute click zones."""
     labels, lines = locate_labels_in_map("\n".join(map_lines))
@@ -328,8 +329,6 @@ def main():
                     "Click on GRAVEYARD or CAVE to return to World 1.",
                     ""
                 ]
-                # Print header and then the map; because we clear screen before printing,
-                # row 1 of terminal corresponds to the first printed line.
                 for line in header_lines:
                     print(line)
                 map_lines = map_art.strip("\n").split("\n")

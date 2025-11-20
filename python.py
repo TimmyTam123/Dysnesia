@@ -253,7 +253,48 @@ def main():
             key = get_key()
             clear()
 
+            # =========================================================
+            # RESEARCH PAGE — draw ONLY the research tree, nothing else
+            # =========================================================
+            if world == 1 and page == 1:
+                if not research_page_unlocked:
+                    print("Research not unlocked yet.")
+                else:
+                    print("=== RESEARCH ===\n")
+                    draw_research_tree()
+
+                    print("Research Keys:")
+                    for res in research:
+                        status = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
+                        print(f"[{res['key']}] Research {res['key']} {status}")
+
+                if research_page_unlocked:
+                    print("\nPress [R] to switch pages.")
+
+                # Handle keys (do not continue to print city)
+                if key:
+                    k = key.lower()
+                    if k == 'k':
+                        world = 2 if world == 1 else 1
+                    elif k == 'q':
+                        break
+                    elif k == 'r' and research_page_unlocked:
+                        page = 0
+                    else:
+                        for res in research:
+                            if k == res["key"]:
+                                buy_research(res)
+                                break
+
+                time.sleep(0.1)
+                continue  # <<< THE FIX — stops city/money from printing
+
+            # =======================================
+            # NORMAL GAME VIEW (UPGRADES PAGE)
+            # =======================================
             if world == 1:
+
+                # passive money
                 timea += 0.1
                 if timea >= 1:
                     money += rate * adminmultiplier * othermultiplier
@@ -264,61 +305,52 @@ def main():
                 update_building_heights(w1upgrades)
                 draw_city()
 
-                print("\n=== UPGRADES ===" if page == 0 else "\n=== RESEARCH ===")
+                print("\n=== UPGRADES ===")
 
-                if page == 0:
-                    any_seen = False
-                    for upg in upgrades:
-                        if money >= upg.get("cost",0) * 0.1:
-                            upg["seen"] = True
-                        if upg.get("seen", False):
-                            any_seen = True
-                            status = f"+{upg.get('rate_inc',0)}/sec | Cost: ${upg.get('cost', 0)}" \
-                                if upg.get("count", 0) < upg.get("max",100) else "MAXED"
-                            print(f"[{upg.get('key', '?').upper()}] {upg.get('name', 'Unknown')} "
-                                f"({upg.get('count', 0)}/{upg.get('max',100)}) {status}")
-                    if not any_seen:
-                        print("(No upgrades available yet...)")
+                any_seen = False
+                for upg in upgrades:
+                    if money >= upg["cost"] * 0.1:
+                        upg["seen"] = True
 
-                elif page == 1:
-                    if not research_page_unlocked:
-                        print("Research not unlocked yet.")
-                    else:
-                        draw_research_tree()
-                        print("Research Keys:")
-                        for res in research:
-                            status = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
-                            print(f"[{res['key']}] Research {res['key']} {status}")
+                    if upg["seen"]:
+                        any_seen = True
+                        status = (
+                            f"+{upg['rate_inc']}/sec | Cost: ${upg['cost']}"
+                            if upg["count"] < upg["max"]
+                            else "MAXED"
+                        )
+                        print(
+                            f"[{upg['key'].upper()}] {upg['name']} "
+                            f"({upg['count']}/{upg['max']}) {status}"
+                        )
 
+                if not any_seen:
+                    print("(No upgrades available yet...)")
 
                 if research_page_unlocked:
                     print("\nPress [R] to switch pages.")
 
-                # Upgrade bar at the bottom
+                # bottom sanity bar
                 sanity = 20 - w1upgrades
                 bar = int((sanity / 20) * length)
                 empty = length - bar
                 print("\n[" + "#" * bar + " " * empty + "]\n")
 
+            # INPUT HANDLING
             if key:
                 k = key.lower()
+
                 if k == 'k':
                     world = 2 if world == 1 else 1
                 elif k == 'q':
                     break
                 elif k == 'r' and world == 1 and research_page_unlocked:
-                    page = (page + 1) % 2
-                elif world == 1:
-                    if page == 0:
-                        for upg in upgrades:
-                            if k == upg["key"]:
-                                buy_upgrade(upg)
-                                break
-                    elif page == 1:
-                        for res in research:
-                            if k == res["key"]:
-                                buy_research(res)
-                                break
+                    page = 1
+                elif page == 0 and world == 1:
+                    for upg in upgrades:
+                        if k == upg["key"]:
+                            buy_upgrade(upg)
+                            break
 
             time.sleep(0.1)
 
@@ -326,6 +358,7 @@ def main():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         clear()
         print("Exited cleanly.")
+
 
 
 if __name__ == "__main__":
