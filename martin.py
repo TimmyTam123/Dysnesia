@@ -1,10 +1,32 @@
 import os
 import sys
-import termios
 import time
 import select
-import tty
 import random
+
+# --- CROSS-PLATFORM SINGLE-CHAR INPUT ---
+if sys.platform == "win32":
+    import msvcrt
+
+    def get_char():
+        if msvcrt.kbhit():
+            return msvcrt.getch().decode()
+        return None
+else:
+    import termios
+    import tty
+
+    def get_char():
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            dr, _, _ = select.select([sys.stdin], [], [], 0)
+            if dr:
+                return sys.stdin.read(1)
+            return None
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 # --- GAME STATE ---
 world = 1
@@ -253,27 +275,26 @@ def draw_research_tree():
 # --- MAIN LOOP ---
 def main():
     global world, money, timea, page, w1upgrades
-    generate_city_layout()
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    tty.setcbreak(fd)
+    generate_city_layout()  # your city generation function
     enable_mouse()
 
     try:
         while True:
-            key = get_key()
+            key = get_char()  # cross-platform input
             clear()
 
             # --- WORLD 1 RESEARCH PAGE ---
             if world == 1 and page == 1:
-                if not research_page_unlocked: print("Research not unlocked yet.")
+                if not research_page_unlocked:
+                    print("Research not unlocked yet.")
                 else:
                     print("=== RESEARCH ===\n")
                     draw_research_tree()
                     for res in research:
                         st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
                         print(f"[{res['key']}] Research {res['key']} {st}")
-                if research_page_unlocked: print("\nPress [R] to switch pages.")
+                if research_page_unlocked:
+                    print("\nPress [R] to switch pages.")
                 if key:
                     k = key.lower()
                     if k == 'k': world = 2 if world == 1 else 1
@@ -317,14 +338,13 @@ def main():
                 map_top_row = len(header_lines) + 1
                 absolute_zones = make_absolute_zones(map_art, map_top_row)
                 for line in map_art: print(line)
-                # Debug clickable zones
                 print("\nClickable zones (for debug):")
                 for name, z in absolute_zones.items():
                     print(f" - {name}: rows {z['row_start']}-{z['row_end']}, cols {z['col_start']}-{z['col_end']}")
 
             # --- INPUT HANDLING ---
             if key:
-                if key == '\x1b':
+                if key == '\x1b':  # mouse sequence
                     rest = read_mouse_sequence()
                     if rest and rest.startswith("[<"):
                         try:
@@ -356,9 +376,9 @@ def main():
 
     finally:
         disable_mouse()
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         clear()
         print("Exited cleanly.")
+
 
 if __name__ == "__main__":
     main()
