@@ -121,12 +121,33 @@ upgrades = [
 
 # --- RESEARCH DATA ---
 research = [
-    {"key": "1", "name": "Boost Admin Systems",
+    {"key": "1", "name": "AAAAA",
      "cost": 500000, "purchased": False,
-     "effect": "adminmultiplier *= 1.5"},
-    {"key": "2", "name": "Machine Learning Boost",
+     "effect": "adminmultiplier *= 1.5", "req": "none"},
+    {"key": "2", "name": "BBBBB",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "effect": "othermultiplier *= 2", "req": "1"},
+     {"key": "3", "name": "CCCCC",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2", "req": "1"},
+    {"key": "4", "name": "DDDDD",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2", "req": "2"},
+    {"key": "5", "name": "EEEEE",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2", "req": "2, 3"},
+    {"key": "6", "name": "FFFFF",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2", "req": "3"},
+    {"key": "7", "name": "GGGGG",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2", "req": "4, 5"},
+    {"key": "8", "name": "IIIII",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2", "req": "6"},
+    {"key": "9", "name": "JJJJJ",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2", "req": "7, 8"},
 ]
 
 # --- CITY DATA ---
@@ -272,7 +293,7 @@ def main():
                     draw_research_tree()
                     for res in research:
                         st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
-                        print(f"[{res['key']}] Research {res['key']} {st}")
+                        print(f"[{res['key']}] {res['name']} {st}")
                 if research_page_unlocked: print("\nPress [R] to switch pages.")
                 if key:
                     k = key.lower()
