@@ -276,7 +276,13 @@ def main():
                 if research_page_unlocked: print("\nPress [R] to switch pages.")
                 if key:
                     k = key.lower()
-                    if k == 'k': world = 2 if world == 1 else 1
+                    if k == 'k':
+                        if world == 1:
+                            world = 2
+                        elif world == 2:
+                            world = 1
+                        elif world == 3:
+                            world = 1
                     elif k == 'q': break
                     elif k == 'r' and research_page_unlocked: page = 0
                     else:
@@ -322,6 +328,12 @@ def main():
                 for name, z in absolute_zones.items():
                     print(f" - {name}: rows {z['row_start']}-{z['row_end']}, cols {z['col_start']}-{z['col_end']}")
 
+            # --- DUNGEON VIEW ---
+            if world == 3:
+                print("=== DUNGEON ===\n")
+                print("This is a dungeon\n")
+                print("Press [K] to return to World 1 or [Q] to quit.")
+
             # --- INPUT HANDLING ---
             if key:
                 if key == '\x1b':
@@ -335,15 +347,21 @@ def main():
                                 absolute_zones = make_absolute_zones(map_art, len(header_lines)+1)
                                 for name, z in absolute_zones.items():
                                     if z["row_start"] <= y <= z["row_end"] and z["col_start"] <= x <= z["col_end"]:
-                                        world = 1
-                                        print(f"\nYou clicked {name}. Returning to World 1...")
+                                        world = 3
+                                        print(f"\nYou clicked {name}. Entering Dungeon...")
                                         time.sleep(0.3)
                                         break
                         except: pass
                 else:
                     k = key.lower()
                     if k == 'q': break
-                    elif k == 'k': world = 2 if world == 1 else 1
+                    elif k == 'k':
+                        if world == 1:
+                            world = 2
+                        elif world == 2:
+                            world = 1
+                        elif world == 3:
+                            world = 1
                     elif k == 'r' and research_page_unlocked and world == 1: page = 1
                     elif world == 1 and page == 0:
                         for upg in upgrades:
