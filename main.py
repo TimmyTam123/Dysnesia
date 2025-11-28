@@ -18,6 +18,16 @@ research_page_unlocked = False
 w1upgrades = 0
 length = 40
 
+# --- COMBAT STATE ---
+combat_started = False
+player_hp = 100
+player_max_hp = 100
+enemy_hp = 80
+enemy_max_hp = 80
+player_heals = 3
+combat_log = []
+player_ability_charges = 1
+
 # --- MAP ART ---
 map_art = [
 "                 N",
@@ -271,6 +281,104 @@ def draw_research_tree():
     """
     print(tree)
 
+
+# --- COMBAT HELPERS ---
+def format_bar(value, maximum, width=20):
+    pct = max(0, min(1.0, float(value) / float(maximum))) if maximum > 0 else 0
+    filled = int(pct * width)
+    return "[" + "#" * filled + " " * (width - filled) + "]"
+
+def enter_combat():
+    global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log
+    combat_started = True
+    player_max_hp = 100
+    player_hp = player_max_hp
+    enemy_max_hp = 80
+    enemy_hp = enemy_max_hp
+    player_heals = 3
+    player_ability_charges = 1
+    combat_log = ["A wild foe appears!"]
+
+def draw_combat_ui():
+    # simple ascii characters
+    left = [
+        "  (\\_/)",
+        "  (•_•)",
+        " <( : ) ",
+        "  /   \\",
+        "  /___\\"
+    ]
+    right = [
+        "  /\\_/\\",
+        " ( o.o )",
+        "  ( : )> ",
+        "  /   \\",
+        "  /___\\"
+    ]
+    width = 80
+    # header
+    print("=== DUNGEON - COMBAT ===\n")
+    # draw ascii side-by-side
+    gap = width - 20
+    for i in range(max(len(left), len(right))):
+        l = left[i] if i < len(left) else ""
+        r = right[i] if i < len(right) else ""
+        print(l.ljust(20) + " " * 10 + r.rjust(20))
+
+    # hp bars
+    print()
+    print("Player HP: ", format_bar(player_hp, player_max_hp, 30), f"{player_hp}/{player_max_hp}")
+    print("Enemy  HP: ", format_bar(enemy_hp, enemy_max_hp, 30), f"{enemy_hp}/{enemy_max_hp}")
+
+    # combat log (last 4 messages)
+    print("\n-- Combat Log --")
+    for msg in combat_log[-4:]:
+        print(" - " + msg)
+
+    # action bar at bottom-ish
+    print("\n" + "-" * width)
+    actions = f"[A] Attack   [H] Heal ({player_heals})   [U] Ability ({player_ability_charges})   [K] Back"
+    print(actions.center(width))
+
+def perform_player_action(action):
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world
+    if action == 'attack':
+        dmg = random.randint(8, 15)
+        enemy_hp -= dmg
+        combat_log.append(f"You attack the enemy for {dmg} dmg.")
+    elif action == 'heal':
+        if player_heals <= 0:
+            combat_log.append("No heals left!")
+        else:
+            heal = random.randint(12, 25)
+            player_hp = min(player_max_hp, player_hp + heal)
+            player_heals -= 1
+            combat_log.append(f"You heal for {heal} HP.")
+    elif action == 'ability':
+        if player_ability_charges <= 0:
+            combat_log.append("No ability charges!")
+        else:
+            dmg = random.randint(20, 35)
+            enemy_hp -= dmg
+            player_ability_charges -= 1
+            combat_log.append(f"You use your ability for {dmg} dmg!")
+
+    # check enemy death
+    if enemy_hp <= 0:
+        combat_log.append("Enemy defeated!")
+        combat_started = False
+        world = 1
+        return
+
+    # enemy turn
+    edmg = random.randint(5, 14)
+    player_hp -= edmg
+    combat_log.append(f"Enemy hits you for {edmg} dmg.")
+    if player_hp <= 0:
+        combat_log.append("You were slain...")
+        combat_started = False
+        world = 1
+
 # --- MAIN LOOP ---
 def main():
     global world, money, timea, page, w1upgrades
@@ -349,11 +457,12 @@ def main():
                 for name, z in absolute_zones.items():
                     print(f" - {name}: rows {z['row_start']}-{z['row_end']}, cols {z['col_start']}-{z['col_end']}")
 
-            # --- DUNGEON VIEW ---
+            # --- DUNGEON / COMBAT VIEW ---
             if world == 3:
-                print("=== DUNGEON ===\n")
-                print("This is a dungeon\n")
-                print("Press [K] to return to World 1 or [Q] to quit.")
+                # initialize combat on first entry
+                if not combat_started:
+                    enter_combat()
+                draw_combat_ui()
 
             # --- INPUT HANDLING ---
             if key:
@@ -384,6 +493,15 @@ def main():
                         elif world == 3:
                             world = 1
                     elif k == 'r' and research_page_unlocked and world == 1: page = 1
+                    elif world == 3:
+                        # combat action keys
+                        if k == 'a':
+                            perform_player_action('attack')
+                        elif k == 'h':
+                            perform_player_action('heal')
+                        elif k == 'u':
+                            perform_player_action('ability')
+                        # other keys (k handled above) fall through
                     elif world == 1 and page == 0:
                         for upg in upgrades:
                             if k == upg["key"]: buy_upgrade(upg); break
