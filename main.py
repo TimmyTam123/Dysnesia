@@ -121,31 +121,31 @@ upgrades = [
 
 # --- RESEARCH DATA ---
 research = [
-    {"key": "1", "name": "AAAAA",
+    {"key": "1", "name": "Quantum Processors",
      "cost": 500000, "purchased": False,
      "effect": "adminmultiplier *= 1.5"},
-    {"key": "2", "name": "BBBBB",
+    {"key": "2", "name": "Nanofabrication Labs",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-     {"key": "3", "name": "CCCCC",
+     {"key": "3", "name": "Adaptive AI Networks",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "4", "name": "DDDDD",
+    {"key": "4", "name": "Fusion Power Cells",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "5", "name": "EEEEE",
+    {"key": "5", "name": "Smart Infrastructure",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "6", "name": "FFFFF",
+    {"key": "6", "name": "Synthetic Bio-Alloys",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "7", "name": "GGGGG",
+    {"key": "7", "name": "Interlinked Drone Swarms",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "8", "name": "IIIII",
+    {"key": "8", "name": "Neural Cloud Integration",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "9", "name": "JJJJJ",
+    {"key": "9", "name": "Cryogenic Superconductors",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
 ]
@@ -267,7 +267,8 @@ def draw_research_tree():
                        ||   ||                               || 
                        {nodes[7]}────┐                 ┌──{nodes[8]}
                                       ---{nodes[9]}────
-
+                                            |
+                                            
     """
     print(tree)
 
