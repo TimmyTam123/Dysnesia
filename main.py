@@ -131,33 +131,33 @@ upgrades = [
 
 # --- RESEARCH DATA ---
 research = [
-    {"key": "1", "name": "AAAAA",
+    {"key": "1", "name": "Quantum Processors",
      "cost": 500000, "purchased": False,
-     "effect": "adminmultiplier *= 1.5", "req": "none"},
-    {"key": "2", "name": "BBBBB",
+     "effect": "adminmultiplier *= 1.5"},
+    {"key": "2", "name": "Nanofabrication Labs",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2", "req": "1"},
-     {"key": "3", "name": "CCCCC",
+     "effect": "othermultiplier *= 2"},
+     {"key": "3", "name": "Adaptive AI Networks",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2", "req": "1"},
-    {"key": "4", "name": "DDDDD",
+     "effect": "othermultiplier *= 2"},
+    {"key": "4", "name": "Fusion Power Cells",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2", "req": "2"},
-    {"key": "5", "name": "EEEEE",
+     "effect": "othermultiplier *= 2"},
+    {"key": "5", "name": "Smart Infrastructure",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2", "req": "2, 3"},
-    {"key": "6", "name": "FFFFF",
+     "effect": "othermultiplier *= 2"},
+    {"key": "6", "name": "Synthetic Bio-Alloys",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2", "req": "3"},
-    {"key": "7", "name": "GGGGG",
+     "effect": "othermultiplier *= 2"},
+    {"key": "7", "name": "Interlinked Drone Swarms",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2", "req": "4, 5"},
-    {"key": "8", "name": "IIIII",
+     "effect": "othermultiplier *= 2"},
+    {"key": "8", "name": "Neural Cloud Integration",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2", "req": "6"},
-    {"key": "9", "name": "JJJJJ",
+     "effect": "othermultiplier *= 2"},
+    {"key": "9", "name": "Cryogenic Superconductors",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2", "req": "7, 8"},
+     "effect": "othermultiplier *= 2"},
 ]
 
 # --- CITY DATA ---
@@ -277,7 +277,8 @@ def draw_research_tree():
                        ||   ||                               || 
                        {nodes[7]}────┐                 ┌──{nodes[8]}
                                       ---{nodes[9]}────
-
+                                            |
+                                            
     """
     print(tree)
 
