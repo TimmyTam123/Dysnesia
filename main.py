@@ -11,12 +11,22 @@ world = 1
 timea = 0.0
 money = 0
 rate = 1
-adminmultiplier = 10000
+adminmultiplier = 100
 othermultiplier = 1.0
 page = 0
 research_page_unlocked = False
 w1upgrades = 0
 length = 40
+
+# --- COMBAT STATE ---
+combat_started = False
+player_hp = 100
+player_max_hp = 100
+enemy_hp = 80
+enemy_max_hp = 80
+player_heals = 3
+combat_log = []
+player_ability_charges = 1
 
 # --- MAP ART ---
 map_art = [
@@ -24,7 +34,7 @@ map_art = [
 "                 ^",
 "                 |",
 "         ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~",
-" River Bend ---> |                   /\\",
+"      River Bend |                     /\\",
 "             ~ ~ | ~ ~ ~   /\\  /\\   /  \\         /\\    /\\ ",
 "                 |        /  \\/  \\_/    \\  /\\   /  \\  /  \\",
 "  ~ ~ ~ ~ ~ ~ ~  |  ~ ~  /                \\/  \\_/    \\/    \\",
@@ -33,11 +43,11 @@ map_art = [
 "                 |    /                                        \\",
 "   ~ ~ ~ ~ ~ ~ ~  |   /                                          \\",
 "                 _|__/____    ________   ____   ____   ____   ____\\__",
-"                /       /|  /  FARM  /| /CAST/ /MARK/ /RUIN/ /TOWN/ / |",
-"               / Field / | /-------/ |/_____/ /____/ /____/ /____/ /  |",
+"                /       /|  /  FARM  /| /TOWN/ /RUIN/ /xxxx/ /xxxx/ / |",
+"               / Field / | /-------/ |/_____/ /____/ /xxxx/ /xxxx/ /  |",
 "              /_______/  | | Barn |  |  ____  ____  ____  ____  |   | |",
 "              |  Orchard|/  |______| /| /____/ /____/ /____/ /____|   | |",
-"              |  (apple)    ________ /                           |   | |",
+"              |  -------    ________ /                           |   | |",
 "              |            /  MILL  /        ROAD -->====>======/___|_|",
 "              |___________/_______ /   BRIDGE                     |",
 "                     |        ||                                   |",
@@ -47,19 +57,19 @@ map_art = [
 "     FOREST  /\\  /\\  |  /\\    ||     /\\    /\\    /\\   /\\    /\\     |",
 "           /  \\/  \\  | /  \\   ||    /  \\  /  \\  /  \\ /  \\  /  \\    |",
 "          /        \\ |/    \\  ||   /    \\/    \\/    \\/    \\/    \\   |",
-"         /  WILD WOODS\\     \\ ||  /   Woodland Path (to ruins) \\  |",
-"        /  (deer, owls) \\    \\|| /                                \\ |",
+"         /  WILD WOODS\\     \\ ||  /   Woodland Path            \\  |",
+"        /              \\    \\|| /                                \\ |",
 "       /________________\\    \\|/      ╔══════════════════════════╗\\|",
 "                             \\        ║      GRAVEYARD          ║ \\",
 "                              \\       ║  XXXX  X  XX   X  XX   X ║  \\",
 "                               \\      ║  X  X  XXXX   X  XX   X  ║   \\",
 "                                \\     ║  XX   X X    XX   X  XXX ║    \\",
-"                                 \\    ║  Old stones, willow     ║     \\",
-"                                  \\   ║  lantern, broken gate   ║      \\",
+"                                 \\    ║  X  X  XX XXX X XXX     ║     \\",
+"                                  \\   ║    X XX  XX   X  X XXX  ║      \\",
 "                                   \\  ╚════════════════════════╝       \\",
 "                                    \\                                 \\",
 "                                     \\           +----+                 \\",
-"                                      \\          |CAVE| <- entrance      \\",
+"                                      \\          |CAVE|                  \\",
 "                                       \\         +----+                  \\",
 "                                        \\                                \\",
 "                                         \\        MARSHLAND  ~ ~ ~ ~      \\",
@@ -121,31 +131,31 @@ upgrades = [
 
 # --- RESEARCH DATA ---
 research = [
-    {"key": "1", "name": "AAAAA",
+    {"key": "1", "name": "Quantum Processors",
      "cost": 500000, "purchased": False,
      "effect": "adminmultiplier *= 1.5"},
-    {"key": "2", "name": "BBBBB",
+    {"key": "2", "name": "Nanofabrication Labs",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-     {"key": "3", "name": "CCCCC",
+     {"key": "3", "name": "Adaptive AI Networks",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "4", "name": "DDDDD",
+    {"key": "4", "name": "Fusion Power Cells",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "5", "name": "EEEEE",
+    {"key": "5", "name": "Smart Infrastructure",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "6", "name": "FFFFF",
+    {"key": "6", "name": "Synthetic Bio-Alloys",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "7", "name": "GGGGG",
+    {"key": "7", "name": "Interlinked Drone Swarms",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "8", "name": "IIIII",
+    {"key": "8", "name": "Neural Cloud Integration",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
-    {"key": "9", "name": "JJJJJ",
+    {"key": "9", "name": "Cryogenic Superconductors",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
 ]
@@ -260,16 +270,115 @@ def draw_research_tree():
             nodes.append(f"[R{i+1}: ]")
     tree = f"""
                      ┌────────{nodes[0]}────────┐
-                     ||                        ||
-          ┌────────{nodes[1]}────────┐   ┌────────{nodes[2]}────────┐
-          ||                      ||   ||                        ||
-          {nodes[3]}────┐   ┌────{nodes[4]}               {nodes[5]}─  
-                       ||   ||                               || 
-                       {nodes[7]}────┐                 ┌──{nodes[8]}
-                                      ---{nodes[9]}────
-
+                     ||                    ||
+          ┌────────{nodes[1]}────────┐        ────{nodes[2]}────────┐
+          ||                     ||                      ||
+          {nodes[3]}───---─┐┌────{nodes[4]}                      {nodes[5]}  
+                    ||                               || 
+                       {nodes[7]}────┐                 ┌──----{nodes[8]}
+                                       -----{nodes[9]}────
+                                            |
+                                            
     """
     print(tree)
+
+
+# --- COMBAT HELPERS ---
+def format_bar(value, maximum, width=20):
+    pct = max(0, min(1.0, float(value) / float(maximum))) if maximum > 0 else 0
+    filled = int(pct * width)
+    return "[" + "#" * filled + " " * (width - filled) + "]"
+
+def enter_combat():
+    global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log
+    combat_started = True
+    player_max_hp = 100
+    player_hp = player_max_hp
+    enemy_max_hp = 80
+    enemy_hp = enemy_max_hp
+    player_heals = 3
+    player_ability_charges = 1
+    combat_log = ["A wild foe appears!"]
+
+def draw_combat_ui():
+    # simple ascii characters
+    left = [
+        "  (\\_/)",
+        "  (•_•)",
+        " <( : ) ",
+        "  /   \\",
+        "  /___\\"
+    ]
+    right = [
+        "  /\\_/\\",
+        " ( o.o )",
+        "  ( : )> ",
+        "  /   \\",
+        "  /___\\"
+    ]
+    width = 80
+    # header
+    print("=== DUNGEON - COMBAT ===\n")
+    # draw ascii side-by-side
+    gap = width - 20
+    for i in range(max(len(left), len(right))):
+        l = left[i] if i < len(left) else ""
+        r = right[i] if i < len(right) else ""
+        print(l.ljust(20) + " " * 10 + r.rjust(20))
+
+    # hp bars
+    print()
+    print("Player HP: ", format_bar(player_hp, player_max_hp, 30), f"{player_hp}/{player_max_hp}")
+    print("Enemy  HP: ", format_bar(enemy_hp, enemy_max_hp, 30), f"{enemy_hp}/{enemy_max_hp}")
+
+    # combat log (last 4 messages)
+    print("\n-- Combat Log --")
+    for msg in combat_log[-4:]:
+        print(" - " + msg)
+
+    # action bar at bottom-ish
+    print("\n" + "-" * width)
+    actions = f"[A] Attack   [H] Heal ({player_heals})   [U] Ability ({player_ability_charges})   [K] Back"
+    print(actions.center(width))
+
+def perform_player_action(action):
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world
+    if action == 'attack':
+        dmg = random.randint(8, 15)
+        enemy_hp -= dmg
+        combat_log.append(f"You attack the enemy for {dmg} dmg.")
+    elif action == 'heal':
+        if player_heals <= 0:
+            combat_log.append("No heals left!")
+        else:
+            heal = random.randint(12, 25)
+            player_hp = min(player_max_hp, player_hp + heal)
+            player_heals -= 1
+            combat_log.append(f"You heal for {heal} HP.")
+    elif action == 'ability':
+        if player_ability_charges <= 0:
+            combat_log.append("No ability charges!")
+        else:
+            dmg = random.randint(20, 35)
+            enemy_hp -= dmg
+            player_ability_charges -= 1
+            combat_log.append(f"You use your ability for {dmg} dmg!")
+
+    # check enemy death
+    if enemy_hp <= 0:
+        combat_log.append("Enemy defeated!")
+        combat_started = False
+        world = 1
+        return
+
+    # enemy turn
+    edmg = random.randint(5, 14)
+    player_hp -= edmg
+    combat_log.append(f"Enemy hits you for {edmg} dmg.")
+    if player_hp <= 0:
+        combat_log.append("You were slain...")
+        combat_started = False
+        world = 1
 
 # --- MAIN LOOP ---
 def main():
@@ -349,11 +458,12 @@ def main():
                 for name, z in absolute_zones.items():
                     print(f" - {name}: rows {z['row_start']}-{z['row_end']}, cols {z['col_start']}-{z['col_end']}")
 
-            # --- DUNGEON VIEW ---
+            # --- DUNGEON / COMBAT VIEW ---
             if world == 3:
-                print("=== DUNGEON ===\n")
-                print("This is a dungeon\n")
-                print("Press [K] to return to World 1 or [Q] to quit.")
+                # initialize combat on first entry
+                if not combat_started:
+                    enter_combat()
+                draw_combat_ui()
 
             # --- INPUT HANDLING ---
             if key:
@@ -384,6 +494,15 @@ def main():
                         elif world == 3:
                             world = 1
                     elif k == 'r' and research_page_unlocked and world == 1: page = 1
+                    elif world == 3:
+                        # combat action keys
+                        if k == 'a':
+                            perform_player_action('attack')
+                        elif k == 'h':
+                            perform_player_action('heal')
+                        elif k == 'u':
+                            perform_player_action('ability')
+                        # other keys (k handled above) fall through
                     elif world == 1 and page == 0:
                         for upg in upgrades:
                             if k == upg["key"]: buy_upgrade(upg); break
