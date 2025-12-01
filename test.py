@@ -71,6 +71,7 @@ adminmultiplier = 100
 othermultiplier = 1.0
 page = 0
 research_page_unlocked = False
+technology_page_unlocked = False
 w1upgrades = 0
 length = 40
 
@@ -763,9 +764,36 @@ def main():
                             world = 1
                     elif k == 'q': break
                     elif k == 'r' and research_page_unlocked: page = 0
+                    elif k == 't' and technology_page_unlocked: page = 2
                     else:
                         for r in research:
                             if k == r["key"]: buy_research(r); break
+                time.sleep(0.1)
+                continue
+
+            # --- WORLD 1 TECHNOLOGY PAGE ---
+            if world == 1 and page == 2:
+                if not technology_page_unlocked:
+                    print("Technology not unlocked yet.")
+                else:
+                    print("=== TECHNOLOGY ===\n")
+                    # placeholder technology list; expand as needed
+                    print("[T1] Experimental Engines")
+                    print("[T2] Advanced Metallurgy")
+                if technology_page_unlocked: print("\nPress [T] to switch pages.")
+                if key:
+                    k = key.lower()
+                    if k == 'k':
+                        if world == 1:
+                            world = 2
+                        elif world == 2:
+                            world = 1
+                        elif world == 3:
+                            world = 1
+                    elif k == 'q':
+                        break
+                    elif k == 'r' and research_page_unlocked:
+                        page = 0
                 time.sleep(0.1)
                 continue
 
