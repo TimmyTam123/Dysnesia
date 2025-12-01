@@ -133,31 +133,31 @@ upgrades = [
 research = [
     {"key": "1", "name": "Quantum Processors",
      "cost": 500000, "purchased": False,
-     "effect": "adminmultiplier *= 1.5"},
+     "effect": "othermultiplier *= 1.5"},
     {"key": "2", "name": "Nanofabrication Labs",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "effect": "othermultiplier *= 2.5"},
      {"key": "3", "name": "Adaptive AI Networks",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 6000000, "purchased": False,
+     "effect": "othermultiplier *= 3"},
     {"key": "4", "name": "Fusion Power Cells",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 30000000, "purchased": False,
+     "effect": "othermultiplier *= 3.5"},
     {"key": "5", "name": "Smart Infrastructure",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 150000000, "purchased": False,
+     "effect": "othermultiplier *= 4"},
     {"key": "6", "name": "Synthetic Bio-Alloys",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 1125000000, "purchased": False,
+     "effect": "othermultiplier *= 5"},
     {"key": "7", "name": "Interlinked Drone Swarms",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 20000000000, "purchased": False,
+     "effect": "othermultiplier *= 10"},
     {"key": "8", "name": "Neural Cloud Integration",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 400000000000, "purchased": False,
+     "effect": "othermultiplier *= 15"},
     {"key": "9", "name": "Cryogenic Superconductors",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 1200000000000, "purchased": False,
+     "effect": "othermultiplier *= 20"},
 ]
 
 # --- CITY DATA ---
@@ -272,11 +272,11 @@ def draw_research_tree():
                      ┌────────{nodes[0]}────────┐
                      ||                    ||
           ┌────────{nodes[1]}────────┐        ────{nodes[2]}────────┐
-          ||                     ||                      ||
+          ||                     ||                         ||
           {nodes[3]}───---─┐┌────{nodes[4]}                      {nodes[5]}  
-                    ||                               || 
+                       ||                                  || 
                        {nodes[7]}────┐                 ┌──----{nodes[8]}
-                                       -----{nodes[9]}────
+                                  -------{nodes[9]}────
                                             |
                                             
     """
@@ -398,6 +398,11 @@ def main():
             if world == 1 and page == 1:
                 if not research_page_unlocked: print("Research not unlocked yet.")
                 else:
+                    print(f"Money: {money:.2f}\n")
+                    timea += 0.1
+                    if timea >= 1:
+                        money += rate * adminmultiplier * othermultiplier
+                        timea = 0.0
                     print("=== RESEARCH ===\n")
                     draw_research_tree()
                     for res in research:
