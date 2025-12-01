@@ -11,10 +11,11 @@ world = 1
 timea = 0.0
 money = 0
 rate = 1
-adminmultiplier = 100
+adminmultiplier = 10000000
 othermultiplier = 1.0
 page = 0
 research_page_unlocked = False
+technology_page_unlocked = False
 w1upgrades = 0
 length = 40
 
@@ -158,6 +159,9 @@ research = [
     {"key": "9", "name": "Cryogenic Superconductors",
      "cost": 1200000000000, "purchased": False,
      "effect": "othermultiplier *= 20"},
+    {"key": "0", "name": "Unlock Technology",
+     "cost": 10000000000000, "purchased": False,
+     "effect": "technology_page_unlocked = True"},
 ]
 
 # --- CITY DATA ---
@@ -425,7 +429,12 @@ def main():
                             if k == r["key"]: buy_research(r); break
                 time.sleep(0.1)
                 continue
-
+        # --- WORLD 1 TECHNOLOGY PAGE ---   
+            if world == 1 and page == 2:
+                if not technology_page_unlocked: print("Technology not unlocked yet.")
+                else:
+                    print("technology")
+                continue
             # --- WORLD 1 NORMAL PAGE ---
             if world == 1:
                 timea += 0.1
@@ -446,7 +455,8 @@ def main():
                         status = f"+{upg['rate_inc']}/sec | Cost: ${upg['cost']}" if upg["count"] < upg["max"] else "MAXED"
                         print(f"[{upg['key'].upper()}] {upg['name']} ({upg['count']}/{upg['max']}) {status}")
                 if not any_seen: print("(No upgrades available yet...)")
-                if research_page_unlocked: print("\nPress [R] to switch pages.")
+                if research_page_unlocked: print("\nPress [R] to go to Research.")
+                if technology_page_unlocked: print("Press [T] to go to Technology.")
                 sanity = 20 - w1upgrades
                 bar = int((sanity / 20) * length)
                 print("\n[" + "#" * bar + " " * (length - bar) + "]\n")
@@ -499,13 +509,13 @@ def main():
                         elif world == 3:
                             world = 1
                     elif k == 'r' and research_page_unlocked and world == 1: page = 1
-                    elif world == 3:
+                    elif k == 't' and technology_page_unlocked and world == 1: page = 2
                         # combat action keys
-                        if k == 'a':
+                    if k == 'a':
                             perform_player_action('attack')
-                        elif k == 'h':
+                    elif k == 'h':
                             perform_player_action('heal')
-                        elif k == 'u':
+                    elif k == 'u':
                             perform_player_action('ability')
                         # other keys (k handled above) fall through
                     elif world == 1 and page == 0:
