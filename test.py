@@ -305,6 +305,7 @@ def main():
             key = get_char()
             clear()
 
+
             # --- WORLD 1 RESEARCH PAGE ---
             if world == 1 and page == 1:
                 if not research_page_unlocked: print("Research not unlocked yet.")
