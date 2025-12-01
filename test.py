@@ -17,17 +17,20 @@ if sys.platform == "win32":
         return None
 
 else:
-    import termios, tty
+    import termios
+    import tty
+    import sys
+    import select
+
+    # Keep terminal in cbreak mode permanently during runtime
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+
     def get_char():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
         if dr:
-            fd = sys.stdin.fileno()
-            old = termios.tcgetattr(fd)
-            try:
-                tty.setraw(fd)
-                return sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old)
+            return sys.stdin.read(1)
         return None
 # --- GAME STATE ---
 world = 1
@@ -412,6 +415,7 @@ def main():
 
     finally:
         if sys.platform != "win32":
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             disable_mouse()
         clear()
         print("Exited cleanly.")
