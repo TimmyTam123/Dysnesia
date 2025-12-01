@@ -11,7 +11,7 @@ world = 1
 timea = 0.0
 money = 0
 rate = 1
-adminmultiplier = 10000
+adminmultiplier = 100
 othermultiplier = 1.0
 page = 0
 research_page_unlocked = False
@@ -270,13 +270,13 @@ def draw_research_tree():
             nodes.append(f"[R{i+1}: ]")
     tree = f"""
                      ┌────────{nodes[0]}────────┐
-                     ||                        ||
-          ┌────────{nodes[1]}────────┐   ┌────────{nodes[2]}────────┐
-          ||                      ||   ||                        ||
-          {nodes[3]}────┐   ┌────{nodes[4]}               {nodes[5]}─  
-                       ||   ||                               || 
-                       {nodes[7]}────┐                 ┌──{nodes[8]}
-                                      ---{nodes[9]}────
+                     ||                    ||
+          ┌────────{nodes[1]}────────┐        ────{nodes[2]}────────┐
+          ||                     ||                      ||
+          {nodes[3]}───---─┐┌────{nodes[4]}                      {nodes[5]}  
+                    ||                               || 
+                       {nodes[7]}────┐                 ┌──----{nodes[8]}
+                                       -----{nodes[9]}────
                                             |
                                             
     """
