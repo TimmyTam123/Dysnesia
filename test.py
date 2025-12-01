@@ -17,17 +17,20 @@ if sys.platform == "win32":
         return None
 
 else:
-    import termios, tty
+    import termios
+    import tty
+    import sys
+    import select
+
+    # Keep terminal in cbreak mode permanently during runtime
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+
     def get_char():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
         if dr:
-            fd = sys.stdin.fileno()
-            old = termios.tcgetattr(fd)
-            try:
-                tty.setraw(fd)
-                return sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old)
+            return sys.stdin.read(1)
         return None
 # --- GAME STATE ---
 world = 1
@@ -144,10 +147,31 @@ upgrades = [
 
 # --- RESEARCH DATA ---
 research = [
-    {"key": "1", "name": "Boost Admin Systems",
+    {"key": "1", "name": "AAAAA",
      "cost": 500000, "purchased": False,
      "effect": "adminmultiplier *= 1.5"},
-    {"key": "2", "name": "Machine Learning Boost",
+    {"key": "2", "name": "BBBBB",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2"},
+     {"key": "3", "name": "CCCCC",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2"},
+    {"key": "4", "name": "DDDDD",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2"},
+    {"key": "5", "name": "EEEEE",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2"},
+    {"key": "6", "name": "FFFFF",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2"},
+    {"key": "7", "name": "GGGGG",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2"},
+    {"key": "8", "name": "IIIII",
+     "cost": 2000000, "purchased": False,
+     "effect": "othermultiplier *= 2"},
+    {"key": "9", "name": "JJJJJ",
      "cost": 2000000, "purchased": False,
      "effect": "othermultiplier *= 2"},
 ]
@@ -260,7 +284,7 @@ def draw_research_tree():
                      ┌────────{nodes[0]}────────┐
                      ||                        ||
           ┌────────{nodes[1]}────────┐   ┌────────{nodes[2]}────────┐
-          ||                        ||   ||                        ||
+          ||                      ||   ||                        ||
           {nodes[3]}────┐   ┌────{nodes[4]}               {nodes[5]}─  
                        ||   ||                               || 
                        {nodes[7]}────┐                 ┌──{nodes[8]}
@@ -272,30 +296,34 @@ def draw_research_tree():
 # --- MAIN LOOP ---
 def main():
     global world, money, timea, page, w1upgrades
-    generate_city_layout()  # your city generation function
+    generate_city_layout()
     if sys.platform != "win32":
         enable_mouse()
 
     try:
         while True:
-            key = get_char()  # cross-platform input
+            key = get_char()
             clear()
 
             # --- WORLD 1 RESEARCH PAGE ---
             if world == 1 and page == 1:
-                if not research_page_unlocked:
-                    print("Research not unlocked yet.")
+                if not research_page_unlocked: print("Research not unlocked yet.")
                 else:
                     print("=== RESEARCH ===\n")
                     draw_research_tree()
                     for res in research:
                         st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
-                        print(f"[{res['key']}] Research {res['key']} {st}")
-                if research_page_unlocked:
-                    print("\nPress [R] to switch pages.")
+                        print(f"[{res['key']}] {res['name']} {st}")
+                if research_page_unlocked: print("\nPress [R] to switch pages.")
                 if key:
                     k = key.lower()
-                    if k == 'k': world = 2 if world == 1 else 1
+                    if k == 'k':
+                        if world == 1:
+                            world = 2
+                        elif world == 2:
+                            world = 1
+                        elif world == 3:
+                            world = 1
                     elif k == 'q': break
                     elif k == 'r' and research_page_unlocked: page = 0
                     else:
@@ -336,13 +364,20 @@ def main():
                 map_top_row = len(header_lines) + 1
                 absolute_zones = make_absolute_zones(map_art, map_top_row)
                 for line in map_art: print(line)
+                # Debug clickable zones
                 print("\nClickable zones (for debug):")
                 for name, z in absolute_zones.items():
                     print(f" - {name}: rows {z['row_start']}-{z['row_end']}, cols {z['col_start']}-{z['col_end']}")
 
+            # --- DUNGEON VIEW ---
+            if world == 3:
+                print("=== DUNGEON ===\n")
+                print("This is a dungeon\n")
+                print("Press [K] to return to World 1 or [Q] to quit.")
+
             # --- INPUT HANDLING ---
             if key:
-                if key == '\x1b':  # mouse sequence
+                if key == '\x1b':
                     rest = read_mouse_sequence()
                     if rest and rest.startswith("[<"):
                         try:
@@ -353,15 +388,21 @@ def main():
                                 absolute_zones = make_absolute_zones(map_art, len(header_lines)+1)
                                 for name, z in absolute_zones.items():
                                     if z["row_start"] <= y <= z["row_end"] and z["col_start"] <= x <= z["col_end"]:
-                                        world = 1
-                                        print(f"\nYou clicked {name}. Returning to World 1...")
+                                        world = 3
+                                        print(f"\nYou clicked {name}. Entering Dungeon...")
                                         time.sleep(0.3)
                                         break
                         except: pass
                 else:
                     k = key.lower()
                     if k == 'q': break
-                    elif k == 'k': world = 2 if world == 1 else 1
+                    elif k == 'k':
+                        if world == 1:
+                            world = 2
+                        elif world == 2:
+                            world = 1
+                        elif world == 3:
+                            world = 1
                     elif k == 'r' and research_page_unlocked and world == 1: page = 1
                     elif world == 1 and page == 0:
                         for upg in upgrades:
@@ -374,10 +415,10 @@ def main():
 
     finally:
         if sys.platform != "win32":
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             disable_mouse()
         clear()
         print("Exited cleanly.")
-
 
 if __name__ == "__main__":
     main()
