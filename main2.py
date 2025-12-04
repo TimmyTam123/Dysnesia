@@ -1,44 +1,14 @@
 import os
 import sys
+import termios
 import time
 import select
+import tty
 import random
 import unicodedata
-import locale
 import curses
+import locale
 locale.setlocale(locale.LC_ALL, '')
-
-# --- CROSS-PLATFORM get_char ---
-
-USING_WINDOWS = sys.platform == "win32"
-if USING_WINDOWS:
-    import msvcrt
-    def get_char():
-        if msvcrt.kbhit():
-            ch = msvcrt.getch()
-            try:
-                return ch.decode()
-            except:
-                return None
-        return None
-
-    # no termios on windows
-    fd = None
-    old_settings = None
-
-else:
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    tty.setcbreak(fd)
-
-    def get_char():
-        dr, _, _ = select.select([sys.stdin], [], [], 0)
-        if dr:
-            return sys.stdin.read(1)
-        return None
 
 def flush_stdin(timeout=0.01):
     """Drain any pending bytes from stdin to avoid leftover escape sequences."""
@@ -66,7 +36,7 @@ def display_width(s):
 # record last printed map top row so mouse clicks can be interpreted correctly
 map_last_top_row = 1
 # toggle on-screen zone debug markers
-SHOW_ZONE_DEBUG = False
+SHOW_ZONE_DEBUG = True
 
 def get_cursor_position(timeout=0.05):
     """Query terminal for current cursor position. Returns (row, col) or None on failure."""
@@ -104,14 +74,6 @@ research_page_unlocked = False
 technology_page_unlocked = False
 w1upgrades = 0
 length = 40
-# player level and kill list
-player_level = 1
-MONSTER_NAMES = [
-    "Adam", "Terivon", "Gargoyle", "Slime", "Imp", "Wraith", "Skeleton",
-    "Orc", "Goblin", "Dire Wolf", "Bandit", "Necromancer"
-]
-# list of defeated monsters shown in World 4
-killed_monsters = []
 player_level = 1
 
 # --- COMBAT STATE ---
@@ -435,9 +397,12 @@ def draw_city():
 
 # --- INPUT / CLEAR ---
 def clear(): os.system("cls" if os.name == "nt" else "clear")
+def get_key():
+    dr, _, _ = select.select([sys.stdin], [], [], 0)
+    if dr: return sys.stdin.read(1)
+    return None
 
 # --- BUY FUNCTIONS ---
-
 def buy_upgrade(upg):
     global money, rate, w1upgrades, research_page_unlocked
     if upg["count"] >= upg["max"]: return
@@ -505,7 +470,7 @@ def format_bar(value, maximum, width=20):
     return "[" + "#" * filled + " " * (width - filled) + "]"
 
 def enter_combat(location_name=None):
-    global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log, enemy_name
+    global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log
     combat_started = True
     player_max_hp = 100
     player_hp = player_max_hp
@@ -513,9 +478,7 @@ def enter_combat(location_name=None):
     enemy_hp = enemy_max_hp
     player_heals = 3
     player_ability_charges = 1
-    # pick a random enemy name for this combat
-    enemy_name = random.choice(MONSTER_NAMES)
-    combat_log = [f"A wild {enemy_name} appears at {location_name or 'Unknown Location'}!"]
+    combat_log = [f"A wild foe appears at {location_name or 'Unknown Location'}!"]
 
 def draw_combat_ui():
     # simple ascii characters
@@ -559,7 +522,7 @@ def draw_combat_ui():
     print(actions.center(width))
 
 def perform_player_action(action):
-    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, enemy_name, killed_monsters
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world
     if action == 'attack':
         dmg = random.randint(8, 15)
         enemy_hp -= dmg
@@ -584,11 +547,6 @@ def perform_player_action(action):
     # check enemy death
     if enemy_hp <= 0:
         combat_log.append("Enemy defeated!")
-        # record the defeated enemy in the global kill list
-        try:
-            killed_monsters.append(enemy_name)
-        except Exception:
-            pass
         combat_started = False
         world = 1
         return
@@ -792,11 +750,14 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 def main():
     global world, money, timea, page, w1upgrades
     generate_city_layout()
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
     enable_mouse()
 
     try:
         while True:
-            key = get_char()
+            key = get_key()
             clear()
 
             # --- WORLD 1 RESEARCH PAGE ---
@@ -905,17 +866,12 @@ def main():
                     enter_combat()
                 draw_combat_ui()
 
-            # --- WORLD 4 INVENTORY / LIST ---
+            # --- WORLD 4 KILL LIST ---
             if world == 4:
-                print("=== WORLD 4: KILL LIST ===\n")
-                print(f"Total kills: {len(killed_monsters)}\n")
-                if killed_monsters:
-                    # most recent first
-                    for name in reversed(killed_monsters):
-                        print(f" - {name}")
-                else:
-                    print("[No kills yet]\n")
-                print("\nPress [K] to go back to Map.")
+                print("=== KILL LIST ===\n")
+                print("Monster's killed:")
+                print("[No kills yet]\n")
+                print("Press [K] to go back to Map.")
 
             # --- INPUT HANDLING ---
             if key:
@@ -965,14 +921,8 @@ def main():
             time.sleep(0.1)
 
     finally:
-        if not USING_WINDOWS:
-            try:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            except:
-                pass
-
-            disable_mouse()
-
+        disable_mouse()
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         clear()
         print("Exited cleanly.")
 
