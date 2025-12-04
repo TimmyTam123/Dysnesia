@@ -460,7 +460,7 @@ technology = [
      "damage": 15, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 15", "unlocks": ["2", "3"], "desc": "+15 damage"},
     
-    {"key": "2", "name": "Iron Pickaxe", "ore_costs": {"stone": 10}, "money_cost": 100000, 
+    {"key": "2", "name": "Iron Pickaxe", "ore_costs": {"stone": 3}, "money_cost": 100000, 
      "damage": 25, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 25", "unlocks": ["4", "5"], "desc": "+25 damage"},
     
@@ -469,75 +469,75 @@ technology = [
      "effect": "auto_mine_damage += 5; auto_miner_count += 1", "unlocks": ["6"], "desc": "+5 auto damage"},
     
     # Tier 2 - Unlock Depth 2
-    {"key": "4", "name": "Deeper Shaft", "ore_costs": {"coal": 10, "copper": 5}, "money_cost": 500000, 
+    {"key": "4", "name": "Deeper Shaft", "ore_costs": {"coal": 5, "copper": 2}, "money_cost": 500000, 
      "damage": 0, "auto_damage": 0, "depth_unlock": 2, "purchased": False,
      "effect": "max_depth = max(max_depth, 2)", "unlocks": ["7", "8"], "desc": "Unlock Depth 2"},
     
-    {"key": "5", "name": "Steel Pickaxe", "ore_costs": {"copper": 10, "iron": 5}, "money_cost": 750000, 
+    {"key": "5", "name": "Steel Pickaxe", "ore_costs": {"copper": 5, "iron": 2}, "money_cost": 750000, 
      "damage": 50, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 50", "unlocks": ["9"], "desc": "+50 damage"},
     
-    {"key": "6", "name": "Mining Team", "ore_costs": {"coal": 15, "copper": 10}, "money_cost": 1000000, 
-     "damage": 0, "auto_damage": 15, "depth_unlock": 0, "purchased": False,
-     "effect": "auto_mine_damage += 15; auto_miner_count += 3", "unlocks": ["10"], "desc": "+15 auto damage"},
-    
+    {"key": "6", "name": "Mining Team", "ore_costs": {"coal": 10, "copper": 5}, "money_cost": 1000000, 
+    "damage": 0, "auto_damage": 15, "depth_unlock": 0, "purchased": False,
+    "effect": "auto_mine_damage += 15; auto_miner_count += 3", "unlocks": ["0"], "desc": "+15 auto damage"},
+        
     # Tier 3 - Unlock Depth 3
-    {"key": "7", "name": "Reinforced Shaft", "ore_costs": {"iron": 20, "silver": 10}, "money_cost": 5000000, 
+    {"key": "7", "name": "Reinforced Shaft", "ore_costs": {"iron": 10, "silver": 5}, "money_cost": 5000000, 
      "damage": 0, "auto_damage": 0, "depth_unlock": 3, "purchased": False,
      "effect": "max_depth = max(max_depth, 3)", "unlocks": ["q", "w"], "desc": "Unlock Depth 3"},
     
-    {"key": "8", "name": "Diamond Drill", "ore_costs": {"iron": 25, "silver": 15}, "money_cost": 10000000, 
+    {"key": "8", "name": "Diamond Drill", "ore_costs": {"iron": 12, "silver": 8}, "money_cost": 10000000, 
      "damage": 100, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 100", "unlocks": ["e"], "desc": "+100 damage"},
     
-    {"key": "9", "name": "Titanium Pickaxe", "ore_costs": {"silver": 20}, "money_cost": 7500000, 
+    {"key": "9", "name": "Titanium Pickaxe", "ore_costs": {"silver": 10}, "money_cost": 7500000, 
      "damage": 75, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 75", "unlocks": ["e"], "desc": "+75 damage"},
     
-    {"key": "0", "name": "Mining Crew", "ore_costs": {"iron": 30, "silver": 20}, "money_cost": 15000000, 
+    {"key": "0", "name": "Mining Crew", "ore_costs": {"iron": 15, "silver": 10}, "money_cost": 15000000, 
      "damage": 0, "auto_damage": 30, "depth_unlock": 0, "purchased": False,
      "effect": "auto_mine_damage += 30; auto_miner_count += 5", "unlocks": ["r"], "desc": "+30 auto damage"},
     
     # Tier 4 - Unlock Depth 4
-    {"key": "q", "name": "Deep Mining Shaft", "ore_costs": {"gold": 15, "emerald": 10}, "money_cost": 50000000, 
+    {"key": "q", "name": "Deep Mining Shaft", "ore_costs": {"gold": 8, "emerald": 5}, "money_cost": 50000000, 
      "damage": 0, "auto_damage": 0, "depth_unlock": 4, "purchased": False,
      "effect": "max_depth = max(max_depth, 4)", "unlocks": ["t", "y"], "desc": "Unlock Depth 4"},
     
-    {"key": "w", "name": "Laser Drill", "ore_costs": {"gold": 20, "emerald": 12}, "money_cost": 75000000, 
+    {"key": "w", "name": "Laser Drill", "ore_costs": {"gold": 10, "emerald": 6}, "money_cost": 75000000, 
      "damage": 200, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 200", "unlocks": ["u"], "desc": "+200 damage"},
     
-    {"key": "e", "name": "Mithril Pickaxe", "ore_costs": {"gold": 25, "emerald": 15}, "money_cost": 100000000, 
+    {"key": "e", "name": "Mithril Pickaxe", "ore_costs": {"gold": 12, "emerald": 8}, "money_cost": 100000000, 
      "damage": 150, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 150", "unlocks": ["u"], "desc": "+150 damage"},
     
-    {"key": "r", "name": "Mining Operation", "ore_costs": {"gold": 30, "emerald": 20}, "money_cost": 125000000, 
+    {"key": "r", "name": "Mining Operation", "ore_costs": {"gold": 15, "emerald": 10}, "money_cost": 125000000, 
      "damage": 0, "auto_damage": 50, "depth_unlock": 0, "purchased": False,
      "effect": "auto_mine_damage += 50; auto_miner_count += 10", "unlocks": ["i"], "desc": "+50 auto damage"},
     
     # Tier 5 - Unlock Depth 5
-    {"key": "t", "name": "Ancient Depths", "ore_costs": {"ruby": 20, "diamond": 15}, "money_cost": 500000000, 
+    {"key": "t", "name": "Ancient Depths", "ore_costs": {"ruby": 10, "diamond": 8}, "money_cost": 500000000, 
      "damage": 0, "auto_damage": 0, "depth_unlock": 5, "purchased": False,
      "effect": "max_depth = max(max_depth, 5)", "unlocks": ["o", "p"], "desc": "Unlock Depth 5"},
     
-    {"key": "y", "name": "Plasma Cutter", "ore_costs": {"ruby": 25, "diamond": 20}, "money_cost": 750000000, 
+    {"key": "y", "name": "Plasma Cutter", "ore_costs": {"ruby": 12, "diamond": 10}, "money_cost": 750000000, 
      "damage": 400, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 400", "unlocks": ["o"], "desc": "+400 damage"},
     
-    {"key": "u", "name": "Quantum Drill", "ore_costs": {"diamond": 30}, "money_cost": 1000000000, 
+    {"key": "u", "name": "Quantum Drill", "ore_costs": {"diamond": 15}, "money_cost": 1000000000, 
      "damage": 300, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 300", "unlocks": ["o"], "desc": "+300 damage"},
     
-    {"key": "i", "name": "Industrial Complex", "ore_costs": {"ruby": 40, "diamond": 25}, "money_cost": 2000000000, 
+    {"key": "i", "name": "Industrial Complex", "ore_costs": {"ruby": 20, "diamond": 12}, "money_cost": 2000000000, 
      "damage": 0, "auto_damage": 100, "depth_unlock": 0, "purchased": False,
      "effect": "auto_mine_damage += 100; auto_miner_count += 20", "unlocks": ["p"], "desc": "+100 auto damage"},
     
     # Final upgrades
-    {"key": "o", "name": "Nano-Excavator", "ore_costs": {"mythril": 50, "adamantite": 30}, "money_cost": 5000000000, 
+    {"key": "o", "name": "Nano-Excavator", "ore_costs": {"mythril": 25, "adamantite": 15}, "money_cost": 5000000000, 
      "damage": 1000, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 1000", "unlocks": [], "desc": "+1000 damage"},
     
-    {"key": "p", "name": "Unlock Next World", "ore_costs": {"mythril": 100, "adamantite": 75, "orichalcum": 50}, "money_cost": 25000000000, 
+    {"key": "p", "name": "Unlock Next World", "ore_costs": {"mythril": 50, "adamantite": 30, "orichalcum": 25}, "money_cost": 25000000000, 
      "damage": 0, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "print('Next world unlocked!')", "unlocks": [], "desc": "???"},
 ]
@@ -1260,7 +1260,7 @@ def main():
 
                 if key:
                     k = key.lower()
-                    if k == ' ':  # Mine
+                    if k == ' ':
                         mine_ore()
                     elif k == 'k':
                         world = 2
@@ -1269,20 +1269,42 @@ def main():
                     elif k == 'r': 
                         page = 0
                     elif k in '12345':
-                        # Change depth
-                        new_depth = int(k)
-                        if new_depth <= max_depth:
-                            depth = new_depth
-                            spawn_new_ore()  # Spawn new ore at new depth
+                        # First check if this key is a technology key
+                        is_tech_key = False
+                        for tech in technology:
+                            if k == tech["key"]:
+                                # Check if this tech is available to purchase
+                                is_unlocked = False
+                                if tech["key"] == "1":
+                                    is_unlocked = True
+                                else:
+                                    for prev_tech in technology:
+                                        if prev_tech["purchased"] and tech["key"] in prev_tech.get("unlocks", []):
+                                            is_unlocked = True
+                                            break
+                                
+                                if is_unlocked and not tech["purchased"]:
+                                    buy_technology(tech)
+                                    is_tech_key = True
+                                    break
+                        
+                        # If not a tech key, treat as depth change
+                        if not is_tech_key:
+                            new_depth = int(k)
+                            if new_depth <= max_depth:
+                                depth = new_depth
+                                spawn_new_ore()
                     else:
+                        # Handle other technology keys (q, w, e, r, t, y, u, i, o, p, 0)
                         for tech in technology:
                             if k == tech["key"]: 
                                 buy_technology(tech)
                                 break
+                
                 time.sleep(0.1)
                 continue
             # --- WORLD 1 NORMAL PAGE ---
-            if world == 1:
+            if world == 1 and page == 0:
                 timea += 0.1
                 if timea >= 1:
                     money += rate * adminmultiplier * othermultiplier
@@ -1349,74 +1371,88 @@ def main():
 
             # --- INPUT HANDLING ---
 # --- INPUT HANDLING ---
-       # --- INPUT HANDLING ---
-            if key:
-                if key == '\x1b':
-                    rest = read_mouse_sequence()
-                    if rest and rest.startswith("[<"):
-                        try:
-                            core = rest[2:-1]
-                            b_str, x_str, y_str = core.split(";")
+
+            if key == '\x1b':
+                rest = read_mouse_sequence()
+                if rest and rest.startswith("[<"):
+                    try:
+                        core = rest[2:-1]
+                        parts = core.split(";")
+                        if len(parts) >= 3:
+                            b_str = parts[0]
+                            x_str = parts[1]
+                            y_str = parts[2].rstrip('Mm')  # Remove trailing M or m
                             b, x, y = int(b_str), int(x_str), int(y_str)
                             
-                            # Check if we're on the mining page and clicked on the ore area
-                            if world == 1 and page == 2 and mining_page_unlocked:
-                                # Ore display is roughly at rows 7-16, columns 5-30 (left column)
-                                if 7 <= y <= 16 and 5 <= x <= 30:
-                                    mine_ore()  # Mine when clicking on ore visual
-                                    
-                        except Exception:
-                            pass
-                else:
-                    k = key.lower()
-                    if k == 'q': 
-                        break
-                    elif k == 'k':
-                        if world == 1:
-                            world = 2
-                        elif world == 2:
-                            world = 1
-                        elif world == 3:
-                            world = 1
-                    elif k == 'r' and research_page_unlocked and world == 1: 
-                        page = 1
-                    elif k == 't' and mining_page_unlocked and world == 1: 
-                        page = 2
+                            # Only handle left click (button 0) press
+                            if b == 0:
+                                # Check if we're on the mining page and clicked on the ore area
+                                if world == 1 and page == 2 and mining_page_unlocked:
+                                    # Ore shaft is at rows 6-14 (the visual part with ore symbols)
+                                    # and columns 1-32 in the left column
+                                    if 6 <= y <= 14 and 1 <= x <= 32:
+                                        mine_ore()  # Mine when clicking on ore visual
+                                
+                    except Exception as e:
+                        pass  # Ignore mouse parsing errors
+                # Don't process this as keyboard input
+                key = None
+            
+            # Handle keyboard input
+            if key and key != '\x1b':
+                k = key.lower()
+                if k == 'q': 
+                    pass
+                elif k == 'k':
+                    if world == 1:
+                        world = 2
+                    elif world == 2:
+                        world = 1
                     elif world == 3:
-                        # combat action keys
-                        if k == 'a':
-                            perform_player_action('attack')
-                        elif k == 'h':
-                            perform_player_action('heal')
-                        elif k == 'u':
-                            perform_player_action('ability')
-                    elif world == 1 and page == 0:
-                        for upg in upgrades:
-                            if k == upg["key"]: 
-                                buy_upgrade(upg)
+                        world = 1
+                elif k == 'r' and research_page_unlocked and world == 1: 
+                    page = 1
+                elif k == 't' and mining_page_unlocked and world == 1: 
+                    page = 2
+                elif world == 3:
+                    # combat action keys
+                    if k == 'a':
+                        perform_player_action('attack')
+                    elif k == 'h':
+                        perform_player_action('heal')
+                    elif k == 'u':
+                        perform_player_action('ability')
+                elif world == 1 and page == 0:
+                    for upg in upgrades:
+                        if k == upg["key"]: 
+                            buy_upgrade(upg)
+                            break
+                elif world == 1 and page == 1:
+                    for r in research:
+                        if k == r["key"]: 
+                            buy_research(r)
+                            break
+                elif world == 1 and page == 2:
+                    if k == ' ':
+                        mine_ore()
+                    elif k in '12345':
+                        new_depth = int(k)
+                        if new_depth <= max_depth:
+                            depth = new_depth
+                            spawn_new_ore()
+                    else:
+                        for tech in technology:
+                            if k == tech["key"]: 
+                                buy_technology(tech)
                                 break
-                    elif world == 1 and page == 1:
-                        for r in research:
-                            if k == r["key"]: 
-                                buy_research(r)
-                                break
-                    elif world == 1 and page == 2:
-                        if k == ' ':
-                            mine_ore()
-                        elif k in '12345':
-                            new_depth = int(k)
-                            if new_depth <= max_depth:
-                                depth = new_depth
-                                spawn_new_ore()
-                        else:
-                            for tech in technology:
-                                if k == tech["key"]: 
-                                    buy_technology(tech)
-                                    break
+            
             time.sleep(0.1)
+
     finally:
-        disable_mouse()
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            disable_mouse()
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            clear()
+            print("Exited cleanly.")
 
 if __name__ == "__main__":
     main()
