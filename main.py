@@ -75,6 +75,34 @@ technology_page_unlocked = False
 w1upgrades = 0
 length = 40
 
+# --- MINING STATE ---
+current_ore = None
+ore_hp = 100
+ore_max_hp = 100
+ore_damage = 10
+auto_mine_damage = 0
+depth = 1
+max_depth = 1
+
+# Ore inventory
+ore_inventory = {
+    "stone": 0,
+    "coal": 0,
+    "iron": 0,
+    "copper": 0,
+    "silver": 0,
+    "gold": 0,
+    "emerald": 0,
+    "ruby": 0,
+    "diamond": 0,
+    "mythril": 0,
+    "adamantite": 0,
+    "orichalcum": 0,
+}
+
+mining_page_unlocked = False
+auto_miner_count = 0
+
 # --- COMBAT STATE ---
 combat_started = False
 player_hp = 100
@@ -335,9 +363,183 @@ research = [
     {"key": "9", "name": "Cryogenic Superconductors",
      "cost": 1200000000000, "purchased": False,
      "effect": "othermultiplier *= 20"},
-    {"key": "0", "name": "Unlock Technology",
-     "cost": 10000000000000, "purchased": False,
-     "effect": "technology_page_unlocked = True"},
+    {"key": "0", "name": "Unlock Mining",
+    "cost": 10000000000000, "purchased": False,
+    "effect": "mining_page_unlocked = True"},
+]
+
+# --- ORE TYPES BY DEPTH ---
+ore_types = {
+    1: [  # Depth 1
+        {"name": "stone", "color": "░", "hp": 50, "value": 1, "weight": 50},
+        {"name": "coal", "color": "▓", "hp": 75, "value": 3, "weight": 30},
+        {"name": "copper", "color": "▒", "hp": 100, "value": 5, "weight": 20},
+    ],
+    2: [  # Depth 2
+        {"name": "coal", "color": "▓", "hp": 75, "value": 3, "weight": 30},
+        {"name": "copper", "color": "▒", "hp": 100, "value": 5, "weight": 25},
+        {"name": "iron", "color": "▓", "hp": 150, "value": 10, "weight": 25},
+        {"name": "silver", "color": "░", "hp": 200, "value": 20, "weight": 20},
+    ],
+    3: [  # Depth 3
+        {"name": "iron", "color": "▓", "hp": 150, "value": 10, "weight": 30},
+        {"name": "silver", "color": "░", "hp": 200, "value": 20, "weight": 25},
+        {"name": "gold", "color": "█", "hp": 300, "value": 50, "weight": 25},
+        {"name": "emerald", "color": "◆", "hp": 400, "value": 100, "weight": 20},
+    ],
+    4: [  # Depth 4
+        {"name": "gold", "color": "█", "hp": 300, "value": 50, "weight": 30},
+        {"name": "emerald", "color": "◆", "hp": 400, "value": 100, "weight": 25},
+        {"name": "ruby", "color": "♦", "hp": 500, "value": 200, "weight": 25},
+        {"name": "diamond", "color": "◊", "hp": 750, "value": 500, "weight": 20},
+    ],
+    5: [  # Depth 5
+        {"name": "diamond", "color": "◊", "hp": 750, "value": 500, "weight": 35},
+        {"name": "mythril", "color": "▲", "hp": 1000, "value": 1000, "weight": 30},
+        {"name": "adamantite", "color": "■", "hp": 1500, "value": 2000, "weight": 20},
+        {"name": "orichalcum", "color": "★", "hp": 2500, "value": 5000, "weight": 15},
+    ],
+}
+
+def spawn_new_ore():
+    """Spawn a new ore based on current depth"""
+    global current_ore, ore_hp, ore_max_hp
+    
+    if depth not in ore_types:
+        depth_ores = ore_types[max(ore_types.keys())]
+    else:
+        depth_ores = ore_types[depth]
+    
+    # Weighted random selection
+    total_weight = sum(ore["weight"] for ore in depth_ores)
+    rand = random.randint(1, total_weight)
+    
+    current_weight = 0
+    for ore in depth_ores:
+        current_weight += ore["weight"]
+        if rand <= current_weight:
+            current_ore = ore.copy()
+            ore_max_hp = ore["hp"]
+            ore_hp = ore_max_hp
+            return
+
+def mine_ore():
+    """Mine the current ore (manual click)"""
+    global ore_hp, ore_inventory, money
+    if current_ore is None:
+        spawn_new_ore()
+        return
+    
+    ore_hp -= ore_damage
+    if ore_hp <= 0:
+        # Ore destroyed - add to inventory and spawn new one
+        ore_inventory[current_ore["name"]] += 1
+        money += current_ore["value"] * adminmultiplier * othermultiplier
+        spawn_new_ore()
+
+def auto_mine_tick():
+    """Auto miners damage the ore"""
+    global ore_hp, ore_inventory, money, auto_mine_damage
+    if auto_mine_damage <= 0:
+        return
+    
+    if current_ore is None:
+        spawn_new_ore()
+        return
+    
+    ore_hp -= auto_mine_damage
+    if ore_hp <= 0:
+        ore_inventory[current_ore["name"]] += 1
+        money += current_ore["value"] * adminmultiplier * othermultiplier
+        spawn_new_ore()
+# --- TECHNOLOGY/MINING DATA ---
+# --- TECHNOLOGY/MINING DATA ---
+technology = [
+    # Tier 1 - Basic tools
+    {"key": "1", "name": "Stone Pickaxe", "ore_costs": {}, "money_cost": 0, 
+     "damage": 15, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 15", "unlocks": ["2", "3"], "desc": "+15 damage"},
+    
+    {"key": "2", "name": "Iron Pickaxe", "ore_costs": {"stone": 3}, "money_cost": 100000, 
+     "damage": 25, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 25", "unlocks": ["4", "5"], "desc": "+25 damage"},
+    
+    {"key": "3", "name": "Hire First Miner", "ore_costs": {"stone": 5, "coal": 3}, "money_cost": 50000, 
+     "damage": 0, "auto_damage": 5, "depth_unlock": 0, "purchased": False,
+     "effect": "auto_mine_damage += 5; auto_miner_count += 1", "unlocks": ["6"], "desc": "+5 auto damage"},
+    
+    # Tier 2 - Unlock Depth 2
+    {"key": "4", "name": "Deeper Shaft", "ore_costs": {"coal": 5, "copper": 2}, "money_cost": 500000, 
+     "damage": 0, "auto_damage": 0, "depth_unlock": 2, "purchased": False,
+     "effect": "max_depth = max(max_depth, 2)", "unlocks": ["7", "8"], "desc": "Unlock Depth 2"},
+    
+    {"key": "5", "name": "Steel Pickaxe", "ore_costs": {"copper": 5, "iron": 2}, "money_cost": 750000, 
+     "damage": 50, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 50", "unlocks": ["9"], "desc": "+50 damage"},
+    
+    {"key": "6", "name": "Mining Team", "ore_costs": {"coal": 10, "copper": 5}, "money_cost": 1000000, 
+    "damage": 0, "auto_damage": 15, "depth_unlock": 0, "purchased": False,
+    "effect": "auto_mine_damage += 15; auto_miner_count += 3", "unlocks": ["0"], "desc": "+15 auto damage"},
+        
+    # Tier 3 - Unlock Depth 3
+    {"key": "7", "name": "Reinforced Shaft", "ore_costs": {"iron": 10, "silver": 5}, "money_cost": 5000000, 
+     "damage": 0, "auto_damage": 0, "depth_unlock": 3, "purchased": False,
+     "effect": "max_depth = max(max_depth, 3)", "unlocks": ["q", "w"], "desc": "Unlock Depth 3"},
+    
+    {"key": "8", "name": "Diamond Drill", "ore_costs": {"iron": 12, "silver": 8}, "money_cost": 10000000, 
+     "damage": 100, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 100", "unlocks": ["e"], "desc": "+100 damage"},
+    
+    {"key": "9", "name": "Titanium Pickaxe", "ore_costs": {"silver": 10}, "money_cost": 7500000, 
+     "damage": 75, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 75", "unlocks": ["e"], "desc": "+75 damage"},
+    
+    {"key": "0", "name": "Mining Crew", "ore_costs": {"iron": 15, "silver": 10}, "money_cost": 15000000, 
+     "damage": 0, "auto_damage": 30, "depth_unlock": 0, "purchased": False,
+     "effect": "auto_mine_damage += 30; auto_miner_count += 5", "unlocks": ["r"], "desc": "+30 auto damage"},
+    
+    # Tier 4 - Unlock Depth 4
+    {"key": "q", "name": "Deep Mining Shaft", "ore_costs": {"gold": 8, "emerald": 5}, "money_cost": 50000000, 
+     "damage": 0, "auto_damage": 0, "depth_unlock": 4, "purchased": False,
+     "effect": "max_depth = max(max_depth, 4)", "unlocks": ["t", "y"], "desc": "Unlock Depth 4"},
+    
+    {"key": "w", "name": "Laser Drill", "ore_costs": {"gold": 10, "emerald": 6}, "money_cost": 75000000, 
+     "damage": 200, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 200", "unlocks": ["u"], "desc": "+200 damage"},
+    
+    {"key": "e", "name": "Mithril Pickaxe", "ore_costs": {"gold": 12, "emerald": 8}, "money_cost": 100000000, 
+     "damage": 150, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 150", "unlocks": ["u"], "desc": "+150 damage"},
+    
+    {"key": "r", "name": "Mining Operation", "ore_costs": {"gold": 15, "emerald": 10}, "money_cost": 125000000, 
+     "damage": 0, "auto_damage": 50, "depth_unlock": 0, "purchased": False,
+     "effect": "auto_mine_damage += 50; auto_miner_count += 10", "unlocks": ["i"], "desc": "+50 auto damage"},
+    
+    # Tier 5 - Unlock Depth 5
+    {"key": "t", "name": "Ancient Depths", "ore_costs": {"ruby": 10, "diamond": 8}, "money_cost": 500000000, 
+     "damage": 0, "auto_damage": 0, "depth_unlock": 5, "purchased": False,
+     "effect": "max_depth = max(max_depth, 5)", "unlocks": ["o", "p"], "desc": "Unlock Depth 5"},
+    
+    {"key": "y", "name": "Plasma Cutter", "ore_costs": {"ruby": 12, "diamond": 10}, "money_cost": 750000000, 
+     "damage": 400, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 400", "unlocks": ["o"], "desc": "+400 damage"},
+    
+    {"key": "u", "name": "Quantum Drill", "ore_costs": {"diamond": 15}, "money_cost": 1000000000, 
+     "damage": 300, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 300", "unlocks": ["o"], "desc": "+300 damage"},
+    
+    {"key": "i", "name": "Industrial Complex", "ore_costs": {"ruby": 20, "diamond": 12}, "money_cost": 2000000000, 
+     "damage": 0, "auto_damage": 100, "depth_unlock": 0, "purchased": False,
+     "effect": "auto_mine_damage += 100; auto_miner_count += 20", "unlocks": ["p"], "desc": "+100 auto damage"},
+    
+    # Final upgrades
+    {"key": "o", "name": "Nano-Excavator", "ore_costs": {"mythril": 25, "adamantite": 15}, "money_cost": 5000000000, 
+     "damage": 1000, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "ore_damage += 1000", "unlocks": [], "desc": "+1000 damage"},
+    
+    {"key": "p", "name": "Unlock Next World", "ore_costs": {"mythril": 50, "adamantite": 30, "orichalcum": 25}, "money_cost": 25000000000, 
+     "damage": 0, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
+     "effect": "print('Next world unlocked!')", "unlocks": [], "desc": "???"},
 ]
 
 # --- CITY DATA ---
@@ -422,6 +624,114 @@ def buy_research(res):
     money -= res["cost"]
     res["purchased"] = True
     exec(res["effect"], globals())
+
+def buy_technology(tech):
+    global money, ore_damage, auto_mine_damage, depth, max_depth, ore_inventory, auto_miner_count
+    if tech["purchased"]: 
+        return
+    
+    # Check money
+    if money < tech["money_cost"]: 
+        return
+    
+    # Check ore costs
+    for ore_name, ore_amount in tech["ore_costs"].items():
+        if ore_inventory.get(ore_name, 0) < ore_amount:
+            return
+    
+    # Purchase
+    money -= tech["money_cost"]
+    for ore_name, ore_amount in tech["ore_costs"].items():
+        ore_inventory[ore_name] -= ore_amount
+    
+    tech["purchased"] = True
+    exec(tech["effect"], globals())
+
+
+
+
+def draw_mine_shaft():
+    """Draw the current ore being mined with HP bar"""
+    if current_ore is None:
+        spawn_new_ore()
+    
+    ore_name = current_ore["name"].upper()
+    ore_symbol = current_ore["color"]
+    hp_percent = ore_hp / ore_max_hp if ore_max_hp > 0 else 0
+    bar_width = 30
+    filled = int(hp_percent * bar_width)
+    hp_bar = "[" + "#" * filled + " " * (bar_width - filled) + "]"
+    
+    shaft = f"""
+    ╔═══════════════════════════════════════════════════╗
+    ║              MINING SHAFT - DEPTH {depth}              ║
+    ╚═══════════════════════════════════════════════════╝
+           |                             |
+           |                             |
+          _|_____________________________|_
+         /                                 \\
+        /         {ore_symbol * 5}  {ore_symbol * 5}  {ore_symbol * 5}          \\
+       /        {ore_symbol * 7}  {ore_symbol * 7}  {ore_symbol * 7}        \\
+      /       {ore_symbol * 9}  {ore_symbol * 9}  {ore_symbol * 9}       \\
+     /      {ore_symbol * 11}  {ore_symbol * 11}  {ore_symbol * 11}      \\
+    /___________________________________________\\
+    
+    Current Ore: {ore_name}
+    HP: {hp_bar} {ore_hp}/{ore_max_hp}
+    Value: ${current_ore["value"]} | Click Damage: {ore_damage} | Auto DPS: {auto_mine_damage}
+    """
+    print(shaft)
+
+def draw_technology_tree():
+    """Draw mining tech tree"""
+    nodes = []
+    for tech in technology:
+        mark = "X" if tech["purchased"] else " "
+        nodes.append(f"[{tech['key'].upper()}:{mark}]")
+    
+    while len(nodes) < 20:
+        nodes.append("[  : ]")
+    
+    tree = f"""
+                           {nodes[0]}
+                              |
+                    ┌─────────┴─────────┐
+                    |                   |
+                 {nodes[1]}            {nodes[2]}
+                    |                   |
+          ┌─────────┴────────┐          |
+          |                  |          |
+       {nodes[3]}         {nodes[4]}  {nodes[5]}
+          |                  |          |
+    ┌─────┴─────┐            |          |
+    |           |            |          |
+ {nodes[6]}  {nodes[7]}   {nodes[8]}  {nodes[9]}
+    |           |            |          |
+    └─────┬─────┴────────────┴──────────┘
+          |
+    ┌─────┴─────┐
+    |           |
+ {nodes[10]}  {nodes[11]}
+    |           |
+    └─────┬─────┴──────┐
+          |            |
+       {nodes[12]}  {nodes[13]}
+          |            |
+    ┌─────┴─────┐      |
+    |           |      |
+ {nodes[14]}  {nodes[15]} {nodes[16]}
+    |           |      |
+    └─────┬─────┴──────┘
+          |
+    ┌─────┴─────┐
+    |           |
+ {nodes[17]}  {nodes[18]}
+    |           |
+    └─────┬─────┘
+          |
+       {nodes[19]}
+    """
+    print(tree)
 
 # --- MOUSE CLICK FUNCTIONS ---
 def enable_mouse():
@@ -732,8 +1042,9 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 
 # --- MAIN LOOP ---
 def main():
-    global world, money, timea, page, w1upgrades
+    global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked
     generate_city_layout()
+    spawn_new_ore()  # Add this line
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     tty.setcbreak(fd)
@@ -776,13 +1087,224 @@ def main():
                 time.sleep(0.1)
                 continue
         # --- WORLD 1 TECHNOLOGY PAGE ---   
+           # --- WORLD 1 TECHNOLOGY PAGE ---   
+            # --- WORLD 1 TECHNOLOGY PAGE ---   
             if world == 1 and page == 2:
-                if not technology_page_unlocked: print("Technology not unlocked yet.")
+                if not mining_page_unlocked: 
+                    print("Mining not unlocked yet.")
+                    print("\nPress [R] to return to City")
                 else:
-                    print("technology")
+                    # Time and auto-mining
+                    timea += 0.1
+                    if timea >= 1:
+                        money += rate * adminmultiplier * othermultiplier
+                        auto_mine_tick()
+                        timea = 0.0
+                    
+                    # Get terminal width for layout
+                    import shutil
+                    term_width = shutil.get_terminal_size().columns
+                    
+                    # Left column content
+                    left_content = []
+                    left_content.append(f"Money: ${money:.2f}")
+                    left_content.append("")
+                    
+                    # Mine shaft visualization (compact)
+                    if current_ore is None:
+                        spawn_new_ore()
+                    
+                    ore_name = current_ore["name"].upper()
+                    ore_symbol = current_ore["color"]
+                    hp_percent = ore_hp / ore_max_hp if ore_max_hp > 0 else 0
+                    bar_width = 25
+                    filled = int(hp_percent * bar_width)
+                    hp_bar = "[" + "#" * filled + " " * (bar_width - filled) + "]"
+                    
+                    left_content.append("╔══════════════════════════════╗")
+                    left_content.append(f"║   MINING SHAFT - DEPTH {depth}    ║")
+                    left_content.append("╚══════════════════════════════╝")
+                    left_content.append("       |           |")
+                    left_content.append("      _|___________|_")
+                    left_content.append(f"     /  {ore_symbol * 9}  \\")
+                    left_content.append(f"    /  {ore_symbol * 11}  \\")
+                    left_content.append(f"   /  {ore_symbol * 13}  \\")
+                    left_content.append("  /___________________\\")
+                    left_content.append("")
+                    left_content.append(f"Ore: {ore_name}")
+                    left_content.append(f"HP: {hp_bar}")
+                    left_content.append(f"{ore_hp}/{ore_max_hp}")
+                    left_content.append(f"Value: ${current_ore['value']}")
+                    left_content.append(f"Click: {ore_damage} dmg")
+                    left_content.append(f"Auto: {auto_mine_damage} DPS")
+                    left_content.append("")
+                    
+                    # Ore Inventory (compact)
+                    left_content.append("=== ORE INVENTORY ===")
+                    for ore_name_inv, amount in ore_inventory.items():
+                        if amount > 0:
+                            left_content.append(f"{ore_name_inv.capitalize()}: {amount}")
+                    if not any(ore_inventory.values()):
+                        left_content.append("(None yet)")
+                    left_content.append("")
+                    
+                    # Depth selector
+                    left_content.append("=== DEPTH ===")
+                    left_content.append(f"Current: {depth} | Max: {max_depth}")
+                    depth_line = ""
+                    for d in range(1, min(max_depth + 1, 6)):
+                        marker = f"[{d}]" if d == depth else f" {d} "
+                        depth_line += marker + " "
+                    left_content.append(depth_line)
+                    left_content.append("")
+                    left_content.append(f"Auto-Miners: {auto_miner_count}")
+                    left_content.append("")
+                    left_content.append("[SPACE] Mine")
+                    left_content.append("[R] Return to City")
+                    left_content.append("[1-5] Change Depth")
+                    
+                    # Right column content - Tech Tree
+                    right_content = []
+                    right_content.append("=== MINING TECH TREE ===")
+                    right_content.append("")
+                    
+                    # Draw compact tech tree
+                    nodes = []
+                    for tech in technology:
+                        mark = "X" if tech["purchased"] else " "
+                        nodes.append(f"[{tech['key'].upper()}:{mark}]")
+                    
+                    while len(nodes) < 20:
+                        nodes.append("[  : ]")
+                    
+                    tree_lines = [
+                        f"        {nodes[0]}",
+                        "           |",
+                        "     ┌─────┴─────┐",
+                        f"  {nodes[1]}       {nodes[2]}",
+                        "     |           |",
+                        " ┌───┴───┐       |",
+                        f"{nodes[3]} {nodes[4]} {nodes[5]}",
+                        " |       |       |",
+                        f"{nodes[6]} {nodes[7]} {nodes[8]} {nodes[9]}",
+                        " └───┬───┴───────┘",
+                        "     |",
+                        f" {nodes[10]} {nodes[11]}",
+                        " └───┴───┬───┐",
+                        f"      {nodes[12]} {nodes[13]}",
+                        "  ┌───┴───┐   |",
+                        f"{nodes[14]} {nodes[15]} {nodes[16]}",
+                        "  └───┬───┴───┘",
+                        "      |",
+                        f"  {nodes[17]} {nodes[18]}",
+                        "  └───┬───┘",
+                        "      |",
+                        f"   {nodes[19]}",
+                    ]
+                    
+                    right_content.extend(tree_lines)
+                    right_content.append("")
+                    right_content.append("=== AVAILABLE TECHS ===")
+                    
+                    # Available upgrades (compact)
+                    available_count = 0
+                    for tech in technology:
+                        if tech["purchased"]:
+                            continue
+                        
+                        # Check if unlocked
+                        is_unlocked = False
+                        if tech["key"] == "1":
+                            is_unlocked = True
+                        else:
+                            for prev_tech in technology:
+                                if prev_tech["purchased"] and tech["key"] in prev_tech.get("unlocks", []):
+                                    is_unlocked = True
+                                    break
+                        
+                        if is_unlocked:
+                            available_count += 1
+                            
+                            # Format ore costs (compact)
+                            ore_cost_str = ""
+                            for ore_name_cost, amount in tech["ore_costs"].items():
+                                ore_cost_str += f"{ore_name_cost[:3]}:{amount} "
+                            ore_cost_str = ore_cost_str.strip() if ore_cost_str else "Free"
+                            
+                            money_str = f"${tech['money_cost']}"
+                            
+                            # Shorten long names
+                            tech_name = tech['name']
+                            if len(tech_name) > 18:
+                                tech_name = tech_name[:15] + "..."
+                            
+                            right_content.append(f"[{tech['key'].upper()}] {tech_name}")
+                            right_content.append(f"    {ore_cost_str} | {money_str}")
+                            right_content.append(f"    {tech['desc']}")
+                    
+                    if available_count == 0:
+                        right_content.append("(None available)")
+                    
+                    # Print two columns side by side
+                    left_width = 35
+                    max_lines = max(len(left_content), len(right_content))
+                    
+                    for i in range(max_lines):
+                        left_line = left_content[i] if i < len(left_content) else ""
+                        right_line = right_content[i] if i < len(right_content) else ""
+                        
+                        # Pad left column to fixed width
+                        left_line = left_line[:left_width].ljust(left_width)
+                        
+                        print(f"{left_line}  {right_line}")
+
+                if key:
+                    k = key.lower()
+                    if k == ' ':
+                        mine_ore()
+                    elif k == 'k':
+                        world = 2
+                    elif k == 'q': 
+                        break
+                    elif k == 'r': 
+                        page = 0
+                    elif k in '12345':
+                        # First check if this key is a technology key
+                        is_tech_key = False
+                        for tech in technology:
+                            if k == tech["key"]:
+                                # Check if this tech is available to purchase
+                                is_unlocked = False
+                                if tech["key"] == "1":
+                                    is_unlocked = True
+                                else:
+                                    for prev_tech in technology:
+                                        if prev_tech["purchased"] and tech["key"] in prev_tech.get("unlocks", []):
+                                            is_unlocked = True
+                                            break
+                                
+                                if is_unlocked and not tech["purchased"]:
+                                    buy_technology(tech)
+                                    is_tech_key = True
+                                    break
+                        
+                        # If not a tech key, treat as depth change
+                        if not is_tech_key:
+                            new_depth = int(k)
+                            if new_depth <= max_depth:
+                                depth = new_depth
+                                spawn_new_ore()
+                    else:
+                        # Handle other technology keys (q, w, e, r, t, y, u, i, o, p, 0)
+                        for tech in technology:
+                            if k == tech["key"]: 
+                                buy_technology(tech)
+                                break
+                
+                time.sleep(0.1)
                 continue
             # --- WORLD 1 NORMAL PAGE ---
-            if world == 1:
+            if world == 1 and page == 0:
                 timea += 0.1
                 if timea >= 1:
                     money += rate * adminmultiplier * othermultiplier
@@ -802,7 +1324,7 @@ def main():
                         print(f"[{upg['key'].upper()}] {upg['name']} ({upg['count']}/{upg['max']}) {status}")
                 if not any_seen: print("(No upgrades available yet...)")
                 if research_page_unlocked: print("\nPress [R] to go to Research.")
-                if technology_page_unlocked: print("Press [T] to go to Technology.")
+                if mining_page_unlocked: print("Press [T] to go to Technology.")
                 sanity = 20 - w1upgrades
                 bar = int((sanity / 20) * length)
                 print("\n[" + "#" * bar + " " * (length - bar) + "]\n")
@@ -848,51 +1370,89 @@ def main():
                 draw_combat_ui()
 
             # --- INPUT HANDLING ---
-            if key:
-                if key == '\x1b':
-                    rest = read_mouse_sequence()
-                    if rest and rest.startswith("[<"):
-                        try:
-                            core = rest[2:-1]
-                            b_str, x_str, y_str = core.split(";")
-                            b, x, y = int(b_str), int(x_str), int(y_str)
-                        except Exception:
-                            pass
-                else:
-                    k = key.lower()
-                    if k == 'q': break
-                    elif k == 'k':
-                        if world == 1:
-                            world = 2
-                        elif world == 2:
-                            world = 1
-                        elif world == 3:
-                            world = 1
-                    elif k == 'r' and research_page_unlocked and world == 1: page = 1
-                    elif k == 't' and technology_page_unlocked and world == 1: page = 2
-                    elif world == 3:
-                        # combat action keys
-                        if k == 'a':
-                            perform_player_action('attack')
-                        elif k == 'h':
-                            perform_player_action('heal')
-                        elif k == 'u':
-                            perform_player_action('ability')
-                        # other keys (k handled above) fall through
-                    elif world == 1 and page == 0:
-                        for upg in upgrades:
-                            if k == upg["key"]: buy_upgrade(upg); break
-                    elif world == 1 and page == 1:
-                        for r in research:
-                            if k == r["key"]: buy_research(r); break
+# --- INPUT HANDLING ---
 
+            if key == '\x1b':
+                rest = read_mouse_sequence()
+                if rest and rest.startswith("[<"):
+                    try:
+                        core = rest[2:-1]
+                        parts = core.split(";")
+                        if len(parts) >= 3:
+                            b_str = parts[0]
+                            x_str = parts[1]
+                            y_str = parts[2].rstrip('Mm')  # Remove trailing M or m
+                            b, x, y = int(b_str), int(x_str), int(y_str)
+                            
+                            # Only handle left click (button 0) press
+                            if b == 0:
+                                # Check if we're on the mining page and clicked on the ore area
+                                if world == 1 and page == 2 and mining_page_unlocked:
+                                    # Ore shaft is at rows 6-14 (the visual part with ore symbols)
+                                    # and columns 1-32 in the left column
+                                    if 6 <= y <= 14 and 1 <= x <= 32:
+                                        mine_ore()  # Mine when clicking on ore visual
+                                
+                    except Exception as e:
+                        pass  # Ignore mouse parsing errors
+                # Don't process this as keyboard input
+                key = None
+            
+            # Handle keyboard input
+            if key and key != '\x1b':
+                k = key.lower()
+                if k == 'q': 
+                    pass
+                elif k == 'k':
+                    if world == 1:
+                        world = 2
+                    elif world == 2:
+                        world = 1
+                    elif world == 3:
+                        world = 1
+                elif k == 'r' and research_page_unlocked and world == 1: 
+                    page = 1
+                elif k == 't' and mining_page_unlocked and world == 1: 
+                    page = 2
+                elif world == 3:
+                    # combat action keys
+                    if k == 'a':
+                        perform_player_action('attack')
+                    elif k == 'h':
+                        perform_player_action('heal')
+                    elif k == 'u':
+                        perform_player_action('ability')
+                elif world == 1 and page == 0:
+                    for upg in upgrades:
+                        if k == upg["key"]: 
+                            buy_upgrade(upg)
+                            break
+                elif world == 1 and page == 1:
+                    for r in research:
+                        if k == r["key"]: 
+                            buy_research(r)
+                            break
+                elif world == 1 and page == 2:
+                    if k == ' ':
+                        mine_ore()
+                    elif k in '12345':
+                        new_depth = int(k)
+                        if new_depth <= max_depth:
+                            depth = new_depth
+                            spawn_new_ore()
+                    else:
+                        for tech in technology:
+                            if k == tech["key"]: 
+                                buy_technology(tech)
+                                break
+            
             time.sleep(0.1)
 
     finally:
-        disable_mouse()
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        clear()
-        print("Exited cleanly.")
+            disable_mouse()
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            clear()
+            print("Exited cleanly.")
 
 if __name__ == "__main__":
     main()
