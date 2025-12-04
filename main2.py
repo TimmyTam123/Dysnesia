@@ -86,6 +86,20 @@ player_heals = 3
 combat_log = []
 player_ability_charges = 1
 
+# --- MONSTER / KILL LIST ---
+MONSTER_NAMES = [
+    "Adam", "Boreal Wisp", "Cinderhound", "Dreadling", "Elder Faun",
+    "Fangrat", "Gloomrot", "Hollow Stalker", "Ironclad Beetle",
+    "Jaded Lurker", "Kelvin", "Lurking Shade", "Mire Serpent",
+    "Nether Imp", "Oaken Brute", "Pestilent Rat", "Quarry Golem",
+    "Ravaged Soldier", "Sable Wolf", "Terivon", "Umber Bat",
+    "Vicious Spriggan", "Wretched Ghoul", "Xylophant", "Yawning Horror",
+    "Zereth"
+]
+killed_monsters = []
+current_enemy_name = None
+current_enemy_region = None
+
 # --- MAP ART (UPDATED MAP WITH GRAVEYARD NEAR TOP) ---
 map_art = [
 "                                   N",
@@ -153,6 +167,18 @@ click_labels = {
     "FORGOTTEN SANCTUM": [],
     "SILENT GRAVEYARD": []
 }
+
+# assign one monster name per region (so each region has a set name)
+# Use sequential identifiers so you can edit them manually: enemy_a, enemy_b, ...
+region_enemy_map = {}
+for i, lbl in enumerate(click_labels.keys()):
+    norm = lbl.lower().replace(" ", "_")
+    # generate a letter sequence (a, b, c, ...). Wrap after 'z' back to 'a'.
+    letter = chr(ord('a') + (i % 26))
+    region_enemy_map[norm] = f"enemy_{letter}"
+
+# track which regions have been defeated (so each enemy can only be killed once)
+defeated_regions = set()
 
 def locate_labels_in_map(map_lines):
     """
@@ -470,7 +496,32 @@ def format_bar(value, maximum, width=20):
     return "[" + "#" * filled + " " * (width - filled) + "]"
 
 def enter_combat(location_name=None):
-    global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log
+    global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log, current_enemy_name, current_enemy_region
+    # determine the region key (normalize)
+    if location_name:
+        region_key = str(location_name).lower()
+    else:
+        # pick a random region if none provided
+        try:
+            region_key = random.choice(list(region_enemy_map.keys()))
+        except Exception:
+            region_key = None
+
+    # pick the enemy name assigned to that region (or random fallback)
+    try:
+        enemy_name = region_enemy_map.get(region_key, random.choice(MONSTER_NAMES))
+    except Exception:
+        enemy_name = random.choice(MONSTER_NAMES)
+
+    current_enemy_region = region_key
+
+    # if the region's enemy was already defeated, show message and do not start combat
+    if region_key in defeated_regions:
+        combat_started = False
+        combat_log = [f"'{enemy_name}' has already been defeated!"]
+        return
+
+    # start combat normally
     combat_started = True
     player_max_hp = 100
     player_hp = player_max_hp
@@ -478,7 +529,8 @@ def enter_combat(location_name=None):
     enemy_hp = enemy_max_hp
     player_heals = 3
     player_ability_charges = 1
-    combat_log = [f"A wild foe appears at {location_name or 'Unknown Location'}!"]
+    current_enemy_name = enemy_name
+    combat_log = [f"'{current_enemy_name}' has appeared at {location_name or 'Unknown Location'}!"]
 
 def draw_combat_ui():
     # simple ascii characters
@@ -522,7 +574,7 @@ def draw_combat_ui():
     print(actions.center(width))
 
 def perform_player_action(action):
-    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters
     if action == 'attack':
         dmg = random.randint(8, 15)
         enemy_hp -= dmg
@@ -547,6 +599,14 @@ def perform_player_action(action):
     # check enemy death
     if enemy_hp <= 0:
         combat_log.append("Enemy defeated!")
+        # record the killed monster (most recent first) and mark region defeated
+        try:
+            if current_enemy_region and current_enemy_region not in defeated_regions:
+                defeated_regions.add(current_enemy_region)
+                if current_enemy_name and current_enemy_name not in killed_monsters:
+                    killed_monsters.insert(0, current_enemy_name)
+        except Exception:
+            pass
         combat_started = False
         world = 1
         return
@@ -571,7 +631,7 @@ def curses_map_view(stdscr):
 
     # ASCII list icon for World 4: [≡]
     list_icon = "[≡]"
-    header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}                                                                                {list_icon} Kill List"
+    header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}                                                                                                  {list_icon} Kill List"
     header_lines = [header_line1, "Click on locations to enter the dungeon.", ""]
     # draw header
     for i, line in enumerate(header_lines):
@@ -684,7 +744,7 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
         stdscr.erase()
         # ASCII list icon for World 4
         list_icon = "[≡]"
-        title = f"DUNGEON: {region.replace('_',' ').title()}   Level: {player_level}   {list_icon} World 4"
+        title = f"DUNGEON: {region.replace('_',' ').title()}   Level: {player_level}"
         stdscr.addstr(0, 0, title)
         # draw ascii
         left = ["  (\\_/)", "  (•_•)", " <( : ) ", "  /   \\", "  /___\\\\"]
@@ -869,9 +929,13 @@ def main():
             # --- WORLD 4 KILL LIST ---
             if world == 4:
                 print("=== KILL LIST ===\n")
-                print("Monster's killed:")
-                print("[No kills yet]\n")
-                print("Press [K] to go back to Map.")
+                print("Monsters killed:\n")
+                if killed_monsters:
+                    for i, name in enumerate(killed_monsters, start=1):
+                        print(f"{i}. {name}")
+                else:
+                    print("[No kills yet]\n")
+                print("\nPress [K] to go back to Map.")
 
             # --- INPUT HANDLING ---
             if key:

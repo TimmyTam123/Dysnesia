@@ -559,7 +559,7 @@ def draw_combat_ui():
     print(actions.center(width))
 
 def perform_player_action(action):
-    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, enemy_name, killed_monsters
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, enemy_name, killed_monsters
     if action == 'attack':
         dmg = random.randint(8, 15)
         enemy_hp -= dmg
@@ -590,7 +590,6 @@ def perform_player_action(action):
         except Exception:
             pass
         combat_started = False
-        world = 1
         return
 
     # enemy turn
@@ -600,7 +599,6 @@ def perform_player_action(action):
     if player_hp <= 0:
         combat_log.append("You were slain...")
         combat_started = False
-        world = 1
 
 
 def curses_map_view(stdscr):
@@ -763,28 +761,30 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
         elif ch in (ord('u'), ord('U')):
             perform_player_action('ability')
         elif ch in (ord('k'), ord('K')):
-            # back to map/world 1
-            try:
-                globals()['world'] = 1
-            except Exception:
-                pass
+            # back to map
             return True
         elif ch in (ord('q'), 27):
-            try:
-                globals()['world'] = 1
-            except Exception:
-                pass
             return True
         # check combat end
         if not combat_started:
-            # display final messages until keypress
-            stdscr.addstr(maxy-3, 0, "Combat ended. Press any key to continue...")
-            stdscr.refresh()
-            stdscr.getch()
+            # display final messages until keypress and show killed_monsters debug
             try:
-                globals()['world'] = 1
+                stdscr.addstr(maxy-4, 0, "Combat ended. Press any key to continue...")
             except Exception:
                 pass
+            # show killed monsters debug line (most recent first)
+            try:
+                if 'killed_monsters' in globals() and killed_monsters:
+                    recent = list(reversed(killed_monsters))[:10]
+                    kills_str = ", ".join(recent)
+                else:
+                    kills_str = "(No kills yet)"
+                debug_line = f"Killed monsters (most recent first): {kills_str}"
+                stdscr.addstr(maxy-3, 0, debug_line[:maxx-1])
+            except Exception:
+                pass
+            stdscr.refresh()
+            stdscr.getch()
             return True
 
 
@@ -886,8 +886,8 @@ def main():
                         # Clicked on World 4 button
                         world = 4
                     elif did_combat:
-                        # curses already ran combat and returned — go back to world 1
-                        world = 1
+                        # curses already ran combat and returned — return to map (world 2)
+                        world = 2
                     else:
                         # enter non-curses dungeon (fallback)
                         world = 3
