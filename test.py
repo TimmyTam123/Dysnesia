@@ -13,6 +13,20 @@ locale.setlocale(locale.LC_ALL, '')
 USING_WINDOWS = sys.platform == "win32"
 if USING_WINDOWS:
     import msvcrt
+    def safe_addstr(win, y, x, text, attr=0):
+        """Windows curses crashes on wide unicode. This wraps addstr safely."""
+        try:
+            win.addstr(y, x, text, attr)
+        except:
+            # try stripping problematic characters
+            safe = ""
+            for ch in text:
+                try:
+                    win.addstr(y, x + len(safe), ch, attr)
+                    safe += ch
+                except:
+                    safe += "?"  # fallback placeholder
+            return
     def get_char():
         if msvcrt.kbhit():
             ch = msvcrt.getch()
@@ -617,17 +631,17 @@ def curses_map_view(stdscr):
     header_lines = [header_line1, "Click on locations to enter the dungeon.", ""]
     # draw header
     for i, line in enumerate(header_lines):
-        stdscr.addstr(i, 0, line)
+        safe_addstr(stdscr,i, 0, line)
 
     map_top = len(header_lines)
     # draw map lines
     for i, line in enumerate(map_art):
         try:
-            stdscr.addstr(map_top + i, 0, line)
+            safe_addstr(stdscr,map_top + i, 0, line)
         except Exception:
             # if terminal too small, truncate
             try:
-                stdscr.addstr(map_top + i, 0, line[:stdscr.getmaxyx()[1]-1])
+                safe_addstr(stdscr, map_top + i, 0, line[:stdscr.getmaxyx()[1]-1])
             except Exception:
                 pass
 
@@ -641,10 +655,10 @@ def curses_map_view(stdscr):
             r = z["row_start"] - 1
             c = z["col_start"] - 1
             try:
-                stdscr.addstr(r, c, "[", curses.A_DIM)
+                safe_addstr(stdscr, r, c, "[", curses.A_DIM)
                 # show short name for debugging
                 try:
-                    stdscr.addstr(r, c + 1, name[:18], curses.A_DIM)
+                    safe_addstr(stdscr, r, c + 1, name[:18], curses.A_DIM)
                 except Exception:
                     pass
             except Exception:
@@ -681,7 +695,7 @@ def curses_map_view(stdscr):
                 try:
                     maxy, maxx = stdscr.getmaxyx()
                     dbg = f"Click at {mx},{my} -> {matched[0] if matched else 'NONE'}"
-                    stdscr.addstr(maxy-1, 0, dbg[:maxx-1])
+                    safe_addstr(stdscr, maxy-1, 0, dbg[:maxx-1])
                 except Exception:
                     pass
                 stdscr.refresh()
@@ -697,11 +711,11 @@ def curses_map_view(stdscr):
                         line_idx = start_idx + i
                         y = map_top + line_idx
                         try:
-                            stdscr.chgat(y, col0, z_w, curses.A_REVERSE)
+                            safe_addstr(stdscr, y, col0, " " * z_w, curses.A_REVERSE)
                         except Exception:
                             # fallback: overwrite with reversed slice
                             try:
-                                stdscr.addstr(y, col0, map_art[line_idx][0:z_w], curses.A_REVERSE)
+                                safe_addstr(stdscr, y, col0, map_art[line_idx][0:z_w], curses.A_REVERSE)
                             except Exception:
                                 pass
                     stdscr.refresh()
@@ -727,32 +741,32 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
         # ASCII list icon for World 4
         list_icon = "[≡]"
         title = f"DUNGEON: {region.replace('_',' ').title()}   Level: {player_level}   {list_icon} World 4"
-        stdscr.addstr(0, 0, title)
+        safe_addstr(stdscr, 0, 0, title)
         # draw ascii
         left = ["  (\\_/)", "  (•_•)", " <( : ) ", "  /   \\", "  /___\\\\"]
         right = ["  /\\_/\\"," ( o.o )","  ( : )> ", "  /   \\", "  /___\\\\"]
         for i in range(5):
-            stdscr.addstr(2 + i, 0, left[i])
+            safe_addstr(stdscr, 2 + i, 0, left[i])
             try:
-                stdscr.addstr(2 + i, maxx - 20, right[i])
+                safe_addstr(stdscr, 2 + i, maxx - 20, right[i])
             except Exception:
                 pass
 
         # HP bars
-        stdscr.addstr(8, 0, f"Player HP: {player_hp}/{player_max_hp} ")
-        stdscr.addstr(9, 0, format_bar(player_hp, player_max_hp, min(30, maxx-20)))
-        stdscr.addstr(8, maxx - 40, f"Enemy HP: {enemy_hp}/{enemy_max_hp}")
-        stdscr.addstr(9, maxx - 40, format_bar(enemy_hp, enemy_max_hp, min(30, maxx-20)))
+        safe_addstr(stdscr, 8, 0, f"Player HP: {player_hp}/{player_max_hp} ")
+        safe_addstr(stdscr, 9, 0, format_bar(player_hp, player_max_hp, min(30, maxx-20)))
+        safe_addstr(stdscr, 8, maxx - 40, f"Enemy HP: {enemy_hp}/{enemy_max_hp}")
+        safe_addstr(stdscr, 9, maxx - 40, format_bar(enemy_hp, enemy_max_hp, min(30, maxx-20)))
 
         # combat log
-        stdscr.addstr(11, 0, "-- Combat Log --")
+        safe_addstr(stdscr, 11, 0, "-- Combat Log --")
         for i, msg in enumerate(combat_log[-(maxy-18):], start=0):
             if 12 + i < maxy - 4:
-                stdscr.addstr(12 + i, 0, msg[:maxx-1])
+                safe_addstr(stdscr,12 + i, 0, msg[:maxx-1])
 
         # actions
         actions = "[A] Attack   [H] Heal   [U] Ability   [K] Back"
-        stdscr.addstr(maxy-2, 0, actions[:maxx-1])
+        safe_addstr(stdscr, maxy-2, 0, actions[:maxx-1])
 
         stdscr.refresh()
         ch = stdscr.getch()
@@ -778,7 +792,7 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
         # check combat end
         if not combat_started:
             # display final messages until keypress
-            stdscr.addstr(maxy-3, 0, "Combat ended. Press any key to continue...")
+            safe_addstr(stdscr, maxy-3, 0, "Combat ended. Press any key to continue...")
             stdscr.refresh()
             stdscr.getch()
             try:
