@@ -74,6 +74,14 @@ research_page_unlocked = False
 technology_page_unlocked = False
 w1upgrades = 0
 length = 40
+# player level and kill list
+player_level = 1
+MONSTER_NAMES = [
+    "Adam", "Terivon", "Gargoyle", "Slime", "Imp", "Wraith", "Skeleton",
+    "Orc", "Goblin", "Dire Wolf", "Bandit", "Necromancer"
+]
+# list of defeated monsters shown in World 4
+killed_monsters = []
 player_level = 1
 
 # --- COMBAT STATE ---
@@ -470,7 +478,7 @@ def format_bar(value, maximum, width=20):
     return "[" + "#" * filled + " " * (width - filled) + "]"
 
 def enter_combat(location_name=None):
-    global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log
+    global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log, enemy_name
     combat_started = True
     player_max_hp = 100
     player_hp = player_max_hp
@@ -478,7 +486,9 @@ def enter_combat(location_name=None):
     enemy_hp = enemy_max_hp
     player_heals = 3
     player_ability_charges = 1
-    combat_log = [f"A wild foe appears at {location_name or 'Unknown Location'}!"]
+    # pick a random enemy name for this combat
+    enemy_name = random.choice(MONSTER_NAMES)
+    combat_log = [f"A wild {enemy_name} appears at {location_name or 'Unknown Location'}!"]
 
 def draw_combat_ui():
     # simple ascii characters
@@ -522,7 +532,7 @@ def draw_combat_ui():
     print(actions.center(width))
 
 def perform_player_action(action):
-    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, enemy_name, killed_monsters
     if action == 'attack':
         dmg = random.randint(8, 15)
         enemy_hp -= dmg
@@ -547,6 +557,11 @@ def perform_player_action(action):
     # check enemy death
     if enemy_hp <= 0:
         combat_log.append("Enemy defeated!")
+        # record the defeated enemy in the global kill list
+        try:
+            killed_monsters.append(enemy_name)
+        except Exception:
+            pass
         combat_started = False
         world = 1
         return
@@ -868,10 +883,15 @@ def main():
 
             # --- WORLD 4 INVENTORY / LIST ---
             if world == 4:
-                print("=== WORLD 4: INVENTORY ===\n")
-                print("Items collected:")
-                print("[No items yet]\n")
-                print("Press [K] to go back to Map.")
+                print("=== WORLD 4: KILL LIST ===\n")
+                print(f"Total kills: {len(killed_monsters)}\n")
+                if killed_monsters:
+                    # most recent first
+                    for name in reversed(killed_monsters):
+                        print(f" - {name}")
+                else:
+                    print("[No kills yet]\n")
+                print("\nPress [K] to go back to Map.")
 
             # --- INPUT HANDLING ---
             if key:

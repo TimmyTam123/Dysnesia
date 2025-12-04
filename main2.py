@@ -866,11 +866,11 @@ def main():
                     enter_combat()
                 draw_combat_ui()
 
-            # --- WORLD 4 INVENTORY / LIST ---
+            # --- WORLD 4 KILL LIST ---
             if world == 4:
-                print("=== WORLD 4: INVENTORY ===\n")
-                print("Items collected:")
-                print("[No items yet]\n")
+                print("=== KILL LIST ===\n")
+                print("Monster's killed:")
+                print("[No kills yet]\n")
                 print("Press [K] to go back to Map.")
 
             # --- INPUT HANDLING ---
