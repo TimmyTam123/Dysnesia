@@ -104,7 +104,7 @@ def display_width(s):
 # record last printed map top row so mouse clicks can be interpreted correctly
 map_last_top_row = 1
 # toggle on-screen zone debug markers
-SHOW_ZONE_DEBUG = True
+SHOW_ZONE_DEBUG = False
 
 def get_cursor_position(timeout=0.05):
     """Query terminal for current cursor position. Returns (row, col) or None on failure."""
