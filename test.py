@@ -67,7 +67,7 @@ world = 1
 timea = 0.0
 money = 0
 rate = 1
-adminmultiplier = 100
+adminmultiplier = 10000
 othermultiplier = 1.0
 page = 0
 research_page_unlocked = False
@@ -310,31 +310,34 @@ upgrades = [
 research = [
     {"key": "1", "name": "Quantum Processors",
      "cost": 500000, "purchased": False,
-     "effect": "adminmultiplier *= 1.5"},
+     "effect": "othermultiplier *= 1.5"},
     {"key": "2", "name": "Nanofabrication Labs",
      "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "effect": "othermultiplier *= 2.5"},
      {"key": "3", "name": "Adaptive AI Networks",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 6000000, "purchased": False,
+     "effect": "othermultiplier *= 3"},
     {"key": "4", "name": "Fusion Power Cells",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 30000000, "purchased": False,
+     "effect": "othermultiplier *= 3.5"},
     {"key": "5", "name": "Smart Infrastructure",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 150000000, "purchased": False,
+     "effect": "othermultiplier *= 4"},
     {"key": "6", "name": "Synthetic Bio-Alloys",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 1125000000, "purchased": False,
+     "effect": "othermultiplier *= 5"},
     {"key": "7", "name": "Interlinked Drone Swarms",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 20000000000, "purchased": False,
+     "effect": "othermultiplier *= 10"},
     {"key": "8", "name": "Neural Cloud Integration",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 400000000000, "purchased": False,
+     "effect": "othermultiplier *= 15"},
     {"key": "9", "name": "Cryogenic Superconductors",
-     "cost": 2000000, "purchased": False,
-     "effect": "othermultiplier *= 2"},
+     "cost": 1200000000000, "purchased": False,
+     "effect": "othermultiplier *= 20"},
+    {"key": "0", "name": "Unlock Technology",
+     "cost": 10000000000000, "purchased": False,
+     "effect": "technology_page_unlocked = True"},
 ]
 
 # --- CITY DATA ---
@@ -449,13 +452,12 @@ def draw_research_tree():
                      ┌────────{nodes[0]}────────┐
                      ||                    ||
           ┌────────{nodes[1]}────────┐        ────{nodes[2]}────────┐
-          ||                     ||                      ||
+          ||                     ||                         ||
           {nodes[3]}───---─┐┌────{nodes[4]}                      {nodes[5]}  
-                    ||                               || 
+                       ||                                  || 
                        {nodes[7]}────┐                 ┌──----{nodes[8]}
-                                       -----{nodes[9]}────
+                                  -------{nodes[9]}────
                                             |
-                                            
     """
     print(tree)
 
@@ -730,7 +732,7 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 
 # --- MAIN LOOP ---
 def main():
-    global world, money, timea, page, w1upgrades, map_last_top_row
+    global world, money, timea, page, w1upgrades
     generate_city_layout()
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -742,11 +744,15 @@ def main():
             key = get_key()
             clear()
 
-
             # --- WORLD 1 RESEARCH PAGE ---
             if world == 1 and page == 1:
                 if not research_page_unlocked: print("Research not unlocked yet.")
                 else:
+                    print(f"Money: {money:.2f}\n")
+                    timea += 0.1
+                    if timea >= 1:
+                        money += rate * adminmultiplier * othermultiplier
+                        timea = 0.0
                     print("=== RESEARCH ===\n")
                     draw_research_tree()
                     for res in research:
@@ -764,39 +770,17 @@ def main():
                             world = 1
                     elif k == 'q': break
                     elif k == 'r' and research_page_unlocked: page = 0
-                    elif k == 't' and technology_page_unlocked: page = 2
                     else:
                         for r in research:
                             if k == r["key"]: buy_research(r); break
                 time.sleep(0.1)
                 continue
-
-            # --- WORLD 1 TECHNOLOGY PAGE ---
+        # --- WORLD 1 TECHNOLOGY PAGE ---   
             if world == 1 and page == 2:
-                if not technology_page_unlocked:
-                    print("Technology not unlocked yet.")
+                if not technology_page_unlocked: print("Technology not unlocked yet.")
                 else:
-                    print("=== TECHNOLOGY ===\n")
-                    # placeholder technology list; expand as needed
-                    print("[T1] Experimental Engines")
-                    print("[T2] Advanced Metallurgy")
-                if technology_page_unlocked: print("\nPress [T] to switch pages.")
-                if key:
-                    k = key.lower()
-                    if k == 'k':
-                        if world == 1:
-                            world = 2
-                        elif world == 2:
-                            world = 1
-                        elif world == 3:
-                            world = 1
-                    elif k == 'q':
-                        break
-                    elif k == 'r' and research_page_unlocked:
-                        page = 0
-                time.sleep(0.1)
+                    print("technology")
                 continue
-
             # --- WORLD 1 NORMAL PAGE ---
             if world == 1:
                 timea += 0.1
@@ -817,7 +801,8 @@ def main():
                         status = f"+{upg['rate_inc']}/sec | Cost: ${upg['cost']}" if upg["count"] < upg["max"] else "MAXED"
                         print(f"[{upg['key'].upper()}] {upg['name']} ({upg['count']}/{upg['max']}) {status}")
                 if not any_seen: print("(No upgrades available yet...)")
-                if research_page_unlocked: print("\nPress [R] to switch pages.")
+                if research_page_unlocked: print("\nPress [R] to go to Research.")
+                if technology_page_unlocked: print("Press [T] to go to Technology.")
                 sanity = 20 - w1upgrades
                 bar = int((sanity / 20) * length)
                 print("\n[" + "#" * bar + " " * (length - bar) + "]\n")
@@ -884,6 +869,7 @@ def main():
                         elif world == 3:
                             world = 1
                     elif k == 'r' and research_page_unlocked and world == 1: page = 1
+                    elif k == 't' and technology_page_unlocked and world == 1: page = 2
                     elif world == 3:
                         # combat action keys
                         if k == 'a':
