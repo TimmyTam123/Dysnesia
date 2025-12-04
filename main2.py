@@ -1,44 +1,14 @@
 import os
 import sys
+import termios
 import time
 import select
+import tty
 import random
 import unicodedata
-import locale
 import curses
+import locale
 locale.setlocale(locale.LC_ALL, '')
-
-# --- CROSS-PLATFORM get_char ---
-
-USING_WINDOWS = sys.platform == "win32"
-if USING_WINDOWS:
-    import msvcrt
-    def get_char():
-        if msvcrt.kbhit():
-            ch = msvcrt.getch()
-            try:
-                return ch.decode()
-            except:
-                return None
-        return None
-
-    # no termios on windows
-    fd = None
-    old_settings = None
-
-else:
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    tty.setcbreak(fd)
-
-    def get_char():
-        dr, _, _ = select.select([sys.stdin], [], [], 0)
-        if dr:
-            return sys.stdin.read(1)
-        return None
 
 def flush_stdin(timeout=0.01):
     """Drain any pending bytes from stdin to avoid leftover escape sequences."""
@@ -427,9 +397,12 @@ def draw_city():
 
 # --- INPUT / CLEAR ---
 def clear(): os.system("cls" if os.name == "nt" else "clear")
+def get_key():
+    dr, _, _ = select.select([sys.stdin], [], [], 0)
+    if dr: return sys.stdin.read(1)
+    return None
 
 # --- BUY FUNCTIONS ---
-
 def buy_upgrade(upg):
     global money, rate, w1upgrades, research_page_unlocked
     if upg["count"] >= upg["max"]: return
@@ -777,11 +750,14 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 def main():
     global world, money, timea, page, w1upgrades
     generate_city_layout()
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
     enable_mouse()
 
     try:
         while True:
-            key = get_char()
+            key = get_key()
             clear()
 
             # --- WORLD 1 RESEARCH PAGE ---
@@ -945,14 +921,8 @@ def main():
             time.sleep(0.1)
 
     finally:
-        if not USING_WINDOWS:
-            try:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            except:
-                pass
-
-            disable_mouse()
-
+        disable_mouse()
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         clear()
         print("Exited cleanly.")
 
