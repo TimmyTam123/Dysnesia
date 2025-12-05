@@ -1086,9 +1086,6 @@ def main():
                             if k == r["key"]: buy_research(r); break
                 time.sleep(0.1)
                 continue
-        # --- WORLD 1 TECHNOLOGY PAGE ---   
-           # --- WORLD 1 TECHNOLOGY PAGE ---   
-            # --- WORLD 1 TECHNOLOGY PAGE ---   
             if world == 1 and page == 2:
                 if not mining_page_unlocked: 
                     print("Mining not unlocked yet.")
