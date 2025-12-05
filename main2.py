@@ -409,6 +409,21 @@ upgrades = [
     {"key": "g", "name": "Unlock Research", "rate_inc": 0,
      "base_cost": 1000000, "cost": 1000000, "multiplier": 0, "count": 0, "seen": False, "max": 1,},
 ]
+ore_inventory = {
+    "stone": 0,
+    "coal": 0,
+    "iron": 0,
+    "copper": 0,
+    "silver": 0,
+    "gold": 0,
+    "emerald": 0,
+    "ruby": 0,
+    "diamond": 0,
+    "mythril": 0,
+    "adamantite": 0,
+    "orichalcum": 0,
+}
+
 
 # --- RESEARCH DATA ---
 research = [
@@ -531,20 +546,6 @@ def auto_mine_tick():
         spawn_new_ore()
 # --- TECHNOLOGY/MINING DATA ---
 # Ore inventory
-ore_inventory = {
-    "stone": 0,
-    "coal": 0,
-    "iron": 0,
-    "copper": 0,
-    "silver": 0,
-    "gold": 0,
-    "emerald": 0,
-    "ruby": 0,
-    "diamond": 0,
-    "mythril": 0,
-    "adamantite": 0,
-    "orichalcum": 0,
-}
 
 mining_page_unlocked = False
 auto_miner_count = 0
