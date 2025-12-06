@@ -1,0 +1,2 @@
+# Optional dependency for Windows to provide the standard curses API
+windows-curses

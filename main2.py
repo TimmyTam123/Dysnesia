@@ -4,7 +4,27 @@ import time
 import select
 import random
 import unicodedata
-import curses
+try:
+    import curses
+    HAVE_CURSES = True
+except Exception:
+    curses = None
+    HAVE_CURSES = False
+    # On Windows, try to install the `windows-curses` package automatically
+    if sys.platform == "win32":
+        try:
+            import subprocess
+            import importlib
+            print("`curses` not found — attempting to install `windows-curses`...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "windows-curses"])
+            # try to import again
+            curses = importlib.import_module("curses")
+            HAVE_CURSES = True
+            print("Successfully installed `windows-curses`.")
+        except Exception:
+            # installation failed — leave HAVE_CURSES False and continue with fallback
+            curses = None
+            HAVE_CURSES = False
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
@@ -81,12 +101,27 @@ else:
 def flush_stdin(timeout=0.01):
     """Drain any pending bytes from stdin to avoid leftover escape sequences."""
     try:
-        while True:
-            dr, _, _ = select.select([sys.stdin], [], [], timeout)
-            if not dr:
-                break
-            # read and discard
-            sys.stdin.read(1024)
+        if USING_WINDOWS:
+            # drain msvcrt buffer
+            import msvcrt
+            start = time.time()
+            while time.time() - start < timeout:
+                if not msvcrt.kbhit():
+                    break
+                try:
+                    msvcrt.getch()
+                except Exception:
+                    break
+        else:
+            while True:
+                dr, _, _ = select.select([sys.stdin], [], [], timeout)
+                if not dr:
+                    break
+                # read and discard
+                try:
+                    sys.stdin.read(1024)
+                except Exception:
+                    break
     except Exception:
         pass
 
@@ -109,6 +144,9 @@ SHOW_ZONE_DEBUG = False
 def get_cursor_position(timeout=0.05):
     """Query terminal for current cursor position. Returns (row, col) or None on failure."""
     # DSR - Device Status Report (CPR)
+    # Not reliable on Windows consoles; only attempt on POSIX
+    if USING_WINDOWS or not hasattr(sys.stdin, 'fileno'):
+        return None
     try:
         sys.stdout.write('\x1b[6n')
         sys.stdout.flush()
@@ -1113,6 +1151,45 @@ def curses_map_view(stdscr):
         elif ch in (ord('k'), ord('K')):
             return (None, False)
 
+
+def map_view_fallback():
+    """Non-curses fallback for world map selection on platforms without curses.
+    Returns (normalized_name, False) or (None, False) if cancelled."""
+    print("=== WORLD 2: MAP (text mode) ===")
+    print("Click not available — choose a location by number or press [Q] to cancel.")
+    # print map preview
+    for line in map_art:
+        print(line)
+    labels = locate_labels_in_map(map_art)
+    keys = list(labels.keys())
+    if not keys:
+        print("(No labeled locations found)")
+        return (None, False)
+    print("\nLocations:")
+    for i, k in enumerate(keys, start=1):
+        print(f"[{i}] {k.replace('_',' ').title()}")
+    print("[Q] Cancel")
+    # simple input loop
+    while True:
+        try:
+            choice = input("Choose: ").strip()
+        except Exception:
+            return (None, False)
+        if not choice:
+            continue
+        if choice.lower() == 'q':
+            return (None, False)
+        try:
+            n = int(choice)
+            if 1 <= n <= len(keys):
+                return (keys[n-1], False)
+        except ValueError:
+            # allow direct name
+            norm = choice.lower().replace(' ', '_')
+            if norm in keys:
+                return (norm, False)
+        print("Invalid choice.")
+
 def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
     """Run a simple combat UI inside the existing curses session."""
     curses.curs_set(0)
@@ -1194,9 +1271,22 @@ def main():
     global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked
     generate_city_layout()
     spawn_new_ore()  # Add this line
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    tty.setcbreak(fd)
+    # Configure terminal modes on POSIX only; Windows doesn't have termios/tty
+    if not USING_WINDOWS:
+        try:
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setcbreak(fd)
+            except Exception:
+                pass
+        except Exception:
+            fd = None
+            old_settings = None
+    else:
+        fd = None
+        old_settings = None
+
     enable_mouse()
 
     try:
@@ -1479,10 +1569,13 @@ def main():
                 # open a curses-based full-screen map and wait for click
                 # disable raw mouse reporting from the outer code while curses runs
                 disable_mouse()
-                try:
-                    region_res = curses.wrapper(curses_map_view)
-                except Exception:
-                    region_res = (None, False)
+                if HAVE_CURSES:
+                    try:
+                        region_res = curses.wrapper(curses_map_view)
+                    except Exception:
+                        region_res = (None, False)
+                else:
+                    region_res = map_view_fallback()
                 # flush any leftover bytes (escape sequences) so outer loop doesn't misinterpret
                 flush_stdin()
                 # re-enable outer mouse reporting
@@ -1607,10 +1700,21 @@ def main():
             time.sleep(0.1)
 
     finally:
+        # Always attempt to disable mouse (if enabled), but ignore failures
+        try:
             disable_mouse()
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            clear()
-            print("Exited cleanly.")
+        except Exception:
+            pass
+
+        # Restore POSIX terminal settings only when we previously changed them
+        if not USING_WINDOWS and fd is not None and old_settings is not None:
+            try:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except Exception:
+                pass
+
+        clear()
+        print("Exited cleanly.")
 
 if __name__ == "__main__":
     main()
