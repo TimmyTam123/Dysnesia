@@ -1144,12 +1144,43 @@ def curses_map_view(stdscr):
             new_lines[i] = line[:maxx-1]
 
     map_top = len(header_lines)
-    # place map art into buffer
-    for i, line in enumerate(map_art):
-        dest = map_top + i
-        if dest >= maxy:
-            break
-        new_lines[dest] = line[:maxx-1]
+    # scrolling state
+    visible_height = max(0, maxy - map_top - 1)
+    map_scroll = 0
+
+    def draw_map():
+        # rebuild new_lines for current scroll
+        for i, line in enumerate(header_lines):
+            if i < maxy:
+                new_lines[i] = line[:maxx-1]
+        # fill visible slice of map_art
+        for vis_i in range(visible_height):
+            art_idx = map_scroll + vis_i
+            dest = map_top + vis_i
+            if dest >= maxy:
+                break
+            if art_idx < len(map_art):
+                new_lines[dest] = map_art[art_idx][:maxx-1]
+            else:
+                new_lines[dest] = ''
+
+        # overlay debug markers for visible zones
+        if SHOW_ZONE_DEBUG:
+            for name, z in absolute_zones.items():
+                # compute displayed row for zone (1-based to match earlier math)
+                disp_row_start = z["row_start"] - map_scroll
+                disp_row_idx = disp_row_start - 1
+                if map_top <= disp_row_idx < map_top + visible_height:
+                    try:
+                        r = disp_row_idx
+                        c = z["col_start"] - 1
+                        new_lines[r] = _overlay(new_lines[r], c, '[')
+                        new_lines[r] = _overlay(new_lines[r], c + 1, name[:18])
+                    except Exception:
+                        pass
+
+    # initial draw
+    draw_map()
 
     # compute zones in display coords using existing helper
     # pass map_top+1 (1-based row index) so calculations align with zone math
@@ -1208,10 +1239,33 @@ def curses_map_view(stdscr):
                         if mx >=  stdscr.getmaxyx()[1] - 30:
                             return ("world4_button", False)
                 
-                # find which zone contains (my+1, mx+1)
+                # handle mouse wheel (BUTTON4/BUTTON5) if available
+                try:
+                    btn4 = getattr(curses, 'BUTTON4_PRESSED')
+                    btn5 = getattr(curses, 'BUTTON5_PRESSED')
+                except Exception:
+                    btn4 = btn5 = 0
+                if btn4 and (bstate & btn4):
+                    map_scroll = max(0, map_scroll - 3)
+                    draw_map()
+                    for y, ln in enumerate(new_lines):
+                        render_line(stdscr, y, ln)
+                    present_frame(stdscr)
+                    continue
+                if btn5 and (bstate & btn5):
+                    map_scroll = min(max(0, len(map_art) - visible_height), map_scroll + 3)
+                    draw_map()
+                    for y, ln in enumerate(new_lines):
+                        render_line(stdscr, y, ln)
+                    present_frame(stdscr)
+                    continue
+
+                # find which zone contains (my+1, mx+1) taking scroll into account
                 matched = None
                 for name, z in absolute_zones.items():
-                    if z["row_start"] <= my+1 <= z["row_end"] and z["col_start"] <= mx+1 <= z["col_end"]:
+                    disp_row_start = z["row_start"] - map_scroll
+                    disp_row_end = z["row_end"] - map_scroll
+                    if disp_row_start <= my+1 <= disp_row_end and z["col_start"] <= mx+1 <= z["col_end"]:
                         matched = (name, z)
                         break
                 # debug: show click coords and matched zone at bottom
@@ -1226,21 +1280,23 @@ def curses_map_view(stdscr):
                 if matched:
                     # visually highlight the matched zone briefly
                     name, z = matched
-                    # compute 0-based map_art index for zone start
-                    start_idx = z["row_start"] - (map_top + 1)
+                    # compute 0-based map_art index for zone start, adjusted for scroll
+                    start_idx = z["row_start"] - (map_top + 1) - map_scroll
                     z_h = z["row_end"] - z["row_start"] + 1
                     z_w = z["col_end"] - z["col_start"] + 1
                     col0 = z["col_start"] - 1
                     for i in range(z_h):
                         line_idx = start_idx + i
+                        if line_idx < 0 or line_idx >= visible_height:
+                            continue
                         y = map_top + line_idx
                         try:
                             stdscr.chgat(y, col0, z_w, curses.A_REVERSE)
                         except Exception:
                             # fallback: mark with brackets in the line buffer and render
                             try:
-                                # overlay a reversed-look marker using brackets
-                                lbl = map_art[line_idx][0:z_w]
+                                art_idx = map_scroll + line_idx
+                                lbl = map_art[art_idx][0:z_w]
                                 new = _overlay(new_lines[y], col0, '[' + lbl[:max(0, z_w-2)] + ']')
                                 render_line(stdscr, y, new)
                             except Exception:
@@ -1254,6 +1310,30 @@ def curses_map_view(stdscr):
             return None
         elif ch in (ord('k'), ord('K')):
             return (None, False)
+        elif ch == curses.KEY_UP:
+            map_scroll = max(0, map_scroll - 1)
+            draw_map()
+            for y, ln in enumerate(new_lines):
+                render_line(stdscr, y, ln)
+            present_frame(stdscr)
+        elif ch == curses.KEY_DOWN:
+            map_scroll = min(max(0, len(map_art) - visible_height), map_scroll + 1)
+            draw_map()
+            for y, ln in enumerate(new_lines):
+                render_line(stdscr, y, ln)
+            present_frame(stdscr)
+        elif ch == curses.KEY_PPAGE:
+            map_scroll = max(0, map_scroll - visible_height)
+            draw_map()
+            for y, ln in enumerate(new_lines):
+                render_line(stdscr, y, ln)
+            present_frame(stdscr)
+        elif ch == curses.KEY_NPAGE:
+            map_scroll = min(max(0, len(map_art) - visible_height), map_scroll + visible_height)
+            draw_map()
+            for y, ln in enumerate(new_lines):
+                render_line(stdscr, y, ln)
+            present_frame(stdscr)
 
         # small sleep to cap redraw rate and reduce CPU usage / flicker
         try:
