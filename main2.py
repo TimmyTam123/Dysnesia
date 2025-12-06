@@ -247,6 +247,233 @@ def present_frame(win):
         except Exception:
             pass
 
+
+def research_view():
+    """Handle the research page: only redraw when money increases or research bought."""
+    global money, timea, page, world, research_needs_update, last_money_for_research
+    # initial render
+    need_render = True
+    if last_money_for_research is None:
+        need_render = True
+
+    while world == 1 and page == 1:
+        if need_render:
+            clear()
+            if not research_page_unlocked:
+                print("Research not unlocked yet.")
+            else:
+                print(f"Money: {money:.2f}\n")
+                print("=== RESEARCH ===\n")
+                draw_research_tree()
+                for res in research:
+                    st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
+                    print(f"[{res['key']}] {res['name']} {st}")
+            if research_page_unlocked:
+                print("\nPress [R] to switch pages.")
+            last_money_for_research = money
+            research_needs_update = False
+            need_render = False
+
+        # handle input and money ticks locally so we don't redraw unnecessarily
+        key = get_key()
+        timea += 0.1
+        if timea >= 1:
+            money += rate * adminmultiplier * othermultiplier
+            timea = 0.0
+            research_needs_update = True
+
+        if key:
+            k = key.lower()
+            if k == 'k':
+                if world == 1:
+                    world = 2
+                elif world == 2:
+                    world = 1
+                elif world == 3:
+                    world = 1
+                return
+            elif k == 'q':
+                sys.exit(0)
+            elif k == 'r' and research_page_unlocked:
+                page = 0
+                return
+            else:
+                for r in research:
+                    if k == r["key"]:
+                        buy_research(r)
+                        research_needs_update = True
+                        need_render = True
+                        break
+
+        # decide if we need to re-render due to money change or purchases
+        if research_needs_update or (last_money_for_research is not None and money > last_money_for_research):
+            need_render = True
+
+        time.sleep(0.1)
+
+
+def home_view():
+    """Render World 1 main city/upgrades page only when state changes."""
+    global money, timea, page, world, w1upgrades
+    last_money = None
+    last_upgrades = None
+    need_render = True
+
+    while world == 1 and page == 0:
+        if need_render:
+            clear()
+            print(f"Money: {money:.2f}\n")
+            update_building_heights(w1upgrades)
+            draw_city()
+
+            print("\n=== UPGRADES ===")
+            any_seen = False
+            for upg in upgrades:
+                if money >= upg["cost"] * 0.1:
+                    upg["seen"] = True
+                if upg["seen"]:
+                    any_seen = True
+                    status = (
+                        f"+{upg['rate_inc']}/sec | Cost: ${upg['cost']}"
+                        if upg["count"] < upg["max"] else "MAXED"
+                    )
+                    print(f"[{upg['key'].upper()}] {upg['name']} ({upg['count']}/{upg['max']}) {status}")
+            if not any_seen:
+                print("(No upgrades available yet...)")
+            if research_page_unlocked:
+                print("\nPress [R] to go to Research.")
+            if technology_page_unlocked:
+                print("Press [T] to go to Technology.")
+            sanity = 20 - w1upgrades
+            bar = int((sanity / 20) * length)
+            print("\n[" + "#" * bar + " " * (length - bar) + "]\n")
+
+            last_money = money
+            last_upgrades = w1upgrades
+            need_render = False
+
+        # update money timer
+        timea += 0.1
+        if timea >= 1:
+            money += rate * adminmultiplier * othermultiplier
+            timea = 0.0
+            need_render = True
+
+        key = get_key()
+        if key:
+            k = key.lower()
+            if k == 'k':
+                world = 2
+                return
+            elif k == 'q':
+                sys.exit(0)
+            elif k == 'r' and research_page_unlocked:
+                page = 1
+                return
+            elif k == 't' and technology_page_unlocked:
+                page = 2
+                return
+            else:
+                for upg in upgrades:
+                    if k == upg["key"]:
+                        buy_upgrade(upg)
+                        need_render = True
+                        break
+
+        # re-render if money or upgrades changed externally
+        if money != last_money or w1upgrades != last_upgrades:
+            need_render = True
+
+        time.sleep(0.1)
+
+
+def mining_view():
+    """Render mining page only when relevant state changes."""
+    global money, timea, page, world, current_ore, ore_hp, depth
+    last_money = None
+    last_ore_hp = None
+    last_depth = None
+    need_render = True
+
+    while world == 1 and page == 2:
+        if not technology_page_unlocked:
+            clear()
+            print("Mining not unlocked yet.")
+            print("\nPress [R] to return to City")
+            key = get_key()
+            if key and key.lower() == 'r':
+                page = 0
+                return
+            time.sleep(0.1)
+            continue
+
+        # time and auto-mining
+        timea += 0.1
+        if timea >= 1:
+            money += rate * adminmultiplier * othermultiplier
+            auto_mine_tick()
+            timea = 0.0
+            need_render = True
+
+        if need_render:
+            clear()
+            # Left column
+            print(f"Money: ${money:.2f}")
+            print("")
+            if current_ore is None:
+                spawn_new_ore()
+            draw_mine_shaft()
+
+            # Right column: technology list
+            print("=== TECHNOLOGY ===")
+            available = []
+            for tech in technology:
+                if not tech.get("purchased"):
+                    available.append(tech)
+            if not available:
+                print("(None available)")
+            else:
+                for tech in available:
+                    ore_costs = " ".join(f"{n[:3]}:{a}" for n, a in tech.get("ore_costs", {}).items())
+                    print(f"[{tech['key'].upper()}] {tech['name']} - {ore_costs} | ${tech['money_cost']}")
+
+            last_money = money
+            last_ore_hp = ore_hp
+            last_depth = depth
+            need_render = False
+
+        key = get_key()
+        if key:
+            k = key.lower()
+            if k == ' ':
+                mine_ore()
+                need_render = True
+            elif k == 'k':
+                world = 2
+                return
+            elif k == 'q':
+                sys.exit(0)
+            elif k == 'r':
+                page = 0
+                return
+            elif k in '12345':
+                new_depth = int(k)
+                if new_depth <= max_depth:
+                    depth = new_depth
+                    spawn_new_ore()
+                    need_render = True
+            else:
+                for tech in technology:
+                    if k == tech["key"]:
+                        buy_technology(tech)
+                        need_render = True
+                        break
+
+        if money != last_money or ore_hp != last_ore_hp or depth != last_depth:
+            need_render = True
+
+        time.sleep(0.1)
+
 # --- GAME STATE ---
 world = 1
 timea = 0.0
@@ -260,6 +487,9 @@ technology_page_unlocked = False
 w1upgrades = 0
 length = 40
 player_level = 1
+# research rendering state
+last_money_for_research = None
+research_needs_update = True
 
 # --- MINING STATE ---
 current_ore = None
@@ -827,6 +1057,12 @@ def buy_upgrade(upg):
     w1upgrades += 1
     if upg["name"] == "Unlock Research":
         research_page_unlocked = True
+    # mark research page to update when viewing
+    try:
+        global research_needs_update
+        research_needs_update = True
+    except Exception:
+        pass
     if upg["count"] < upg["max"]:
         upg["cost"] = int(upg["cost"] * upg["multiplier"])
 
@@ -837,6 +1073,12 @@ def buy_research(res):
     money -= res["cost"]
     res["purchased"] = True
     exec(res["effect"], globals())
+    # ensure research view will re-render
+    try:
+        global research_needs_update
+        research_needs_update = True
+    except Exception:
+        pass
 
 
 def buy_technology(tech):
@@ -1447,34 +1689,8 @@ def main():
 
             # --- WORLD 1 RESEARCH PAGE ---
             if world == 1 and page == 1:
-                if not research_page_unlocked: print("Research not unlocked yet.")
-                else:
-                    print(f"Money: {money:.2f}\n")
-                    timea += 0.1
-                    if timea >= 1:
-                        money += rate * adminmultiplier * othermultiplier
-                        timea = 0.0
-                    print("=== RESEARCH ===\n")
-                    draw_research_tree()
-                    for res in research:
-                        st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
-                        print(f"[{res['key']}] {res['name']} {st}")
-                if research_page_unlocked: print("\nPress [R] to switch pages.")
-                if key:
-                    k = key.lower()
-                    if k == 'k':
-                        if world == 1:
-                            world = 2
-                        elif world == 2:
-                            world = 1
-                        elif world == 3:
-                            world = 1
-                    elif k == 'q': break
-                    elif k == 'r' and research_page_unlocked: page = 0
-                    else:
-                        for r in research:
-                            if k == r["key"]: buy_research(r); break
-                time.sleep(0.1)
+                # use a dedicated handler that only redraws when money increases or research bought
+                research_view()
                 continue
             if world == 1 and page == 2:
                 if not technology_page_unlocked: 
