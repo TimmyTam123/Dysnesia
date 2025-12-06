@@ -28,29 +28,10 @@ except Exception:
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
-# --- CROSS-PLATFORM get_char and safe_addstr ---
+# --- CROSS-PLATFORM get_char ---
 USING_WINDOWS = sys.platform == "win32"
 if USING_WINDOWS:
     import msvcrt
-
-    def safe_addstr(win, y, x, text, attr=0):
-        """Windows curses may crash on wide unicode. Wrap addstr safely."""
-        try:
-            win.addstr(y, x, text, attr)
-        except Exception:
-            # try printing character-by-character to avoid wide-char crashes
-            safe = ""
-            for ch in text:
-                try:
-                    win.addstr(y, x + len(safe), ch, attr)
-                    safe += ch
-                except Exception:
-                    try:
-                        win.addstr(y, x + len(safe), "?", attr)
-                        safe += "?"
-                    except Exception:
-                        pass
-            return
 
     def get_char():
         if msvcrt.kbhit():
@@ -60,37 +41,9 @@ if USING_WINDOWS:
             except Exception:
                 return None
         return None
-
-    fd = None
-    old_settings = None
 else:
     import termios
     import tty
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setcbreak(fd)
-    except Exception:
-        pass
-
-    def safe_addstr(win, y, x, text, attr=0):
-        """Wrap addstr to avoid crashes on wide unicode by falling back per-char."""
-        try:
-            win.addstr(y, x, text, attr)
-        except Exception:
-            safe = ""
-            for ch in text:
-                try:
-                    win.addstr(y, x + len(safe), ch, attr)
-                    safe += ch
-                except Exception:
-                    try:
-                        win.addstr(y, x + len(safe), "?", attr)
-                        safe += "?"
-                    except Exception:
-                        pass
-            return
 
     def get_char():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
@@ -167,6 +120,132 @@ def get_cursor_position(timeout=0.05):
     except Exception:
         pass
     return None
+
+
+# --- Curses helpers for reduced-flicker rendering ---
+def sanitize_for_curses(s):
+    out = []
+    for ch in s:
+        try:
+            if unicodedata.combining(ch):
+                continue
+            if unicodedata.east_asian_width(ch) in ("W", "F"):
+                out.append('?')
+            else:
+                out.append(ch)
+        except Exception:
+            out.append('?')
+    return ''.join(out)
+
+
+def init_curses_window(win):
+    """Initialize curses window for smoother drawing."""
+    try:
+        curses.noecho()
+    except Exception:
+        pass
+    try:
+        curses.curs_set(0)
+    except Exception:
+        pass
+    try:
+        win.keypad(True)
+    except Exception:
+        pass
+    try:
+        win.nodelay(True)
+    except Exception:
+        pass
+    try:
+        curses.use_default_colors()
+    except Exception:
+        pass
+    # attach a simple last-screen buffer to the window object
+    try:
+        maxy, maxx = win.getmaxyx()
+        if not hasattr(win, '_last_screen') or len(win._last_screen) != maxy:
+            win._last_screen = [''] * maxy
+    except Exception:
+        pass
+
+
+def safe_addstr(win, y, x, text, attr=0):
+    """Try to add text; on failure sanitize and retry with fewer risky chars.
+    This replaces the previous platform-specific per-char fallbacks for speed."""
+    try:
+        win.addstr(y, x, text, attr)
+        return
+    except Exception:
+        pass
+
+    san = sanitize_for_curses(text)
+    try:
+        win.addstr(y, x, san, attr)
+        return
+    except Exception:
+        pass
+
+    # final fallback: write in small chunks to reduce per-char overhead
+    try:
+        chunk = ''
+        for ch in san:
+            chunk += ch
+            if len(chunk) >= 8:
+                try:
+                    win.addstr(y, x + len(chunk) - len(chunk), chunk, attr)
+                except Exception:
+                    pass
+                chunk = ''
+        if chunk:
+            try:
+                win.addstr(y, x + len(text) - len(chunk), chunk, attr)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def render_line(win, y, text):
+    """Render a single line only if it changed (line-diffing)."""
+    try:
+        maxy, maxx = win.getmaxyx()
+    except Exception:
+        return
+    if y < 0 or y >= maxy:
+        return
+    # create a padded version so we clear any leftover characters from previous content
+    line = text[:maxx-1]
+    try:
+        line_padded = line.ljust(maxx-1)
+    except Exception:
+        line_padded = line
+    last = getattr(win, '_last_screen', None)
+    if last is None:
+        try:
+            win._last_screen = [''] * maxy
+            last = win._last_screen
+        except Exception:
+            last = None
+    if last is not None and last[y] == line_padded:
+        return
+    try:
+        safe_addstr(win, y, 0, line_padded)
+        if last is not None:
+            last[y] = line_padded
+    except Exception:
+        pass
+
+
+def present_frame(win):
+    """Batch refresh using noutrefresh()/doupdate() when available."""
+    try:
+        win.noutrefresh()
+        curses.doupdate()
+    except Exception:
+        try:
+            win.refresh()
+        except Exception:
+            pass
 
 # --- GAME STATE ---
 world = 1
@@ -1042,52 +1121,67 @@ def perform_player_action(action):
 def curses_map_view(stdscr):
     """Draw the map using curses and wait for a mouse click on a labeled region.
     Returns the normalized region name (key in click_labels) or None if canceled."""
-    curses.curs_set(0)
-    stdscr.clear()
-    stdscr.keypad(True)
-    curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+    init_curses_window(stdscr)
+    # enable mouse reporting where available
+    try:
+        curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+    except Exception:
+        pass
 
     # ASCII list icon for World 4: [≡]
     list_icon = "[≡]"
-    header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}                                                                                                  {list_icon} Kill List"
+    # keep header compact to avoid wrapping issues on narrow terminals
+    header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}   {list_icon} Kill List"
     header_lines = [header_line1, "Click on locations to enter the dungeon.", ""]
-    # draw header
+    # prepare a full-screen line buffer and render only changed lines
+    try:
+        maxy, maxx = stdscr.getmaxyx()
+    except Exception:
+        maxy, maxx = 24, 80
+    new_lines = [''] * maxy
     for i, line in enumerate(header_lines):
-        safe_addstr(stdscr, i, 0, line)
+        if i < maxy:
+            new_lines[i] = line[:maxx-1]
 
     map_top = len(header_lines)
-    # draw map lines
+    # place map art into buffer
     for i, line in enumerate(map_art):
-        try:
-            safe_addstr(stdscr, map_top + i, 0, line)
-        except Exception:
-            # if terminal too small, truncate
-            try:
-                maxx = stdscr.getmaxyx()[1]
-                safe_addstr(stdscr, map_top + i, 0, line[:maxx-1])
-            except Exception:
-                pass
+        dest = map_top + i
+        if dest >= maxy:
+            break
+        new_lines[dest] = line[:maxx-1]
 
     # compute zones in display coords using existing helper
     # pass map_top+1 (1-based row index) so calculations align with zone math
     absolute_zones = make_absolute_zones(map_art, map_top + 1)
 
-    # draw debug boxes (optional) - we'll draw short markers at label starts
+    # draw debug boxes (optional) - we'll overlay short markers at label starts
+    def _overlay(line, col, txt):
+        if col < 0:
+            return line
+        if col >= len(line):
+            line = line + ' ' * (col - len(line))
+        pre = line[:col]
+        post = ''
+        if col + len(txt) < len(line):
+            post = line[col + len(txt):]
+        return (pre + txt + post)[:maxx-1]
+
     if SHOW_ZONE_DEBUG:
         for name, z in absolute_zones.items():
             r = z["row_start"] - 1
             c = z["col_start"] - 1
-            try:
-                safe_addstr(stdscr, r, c, "[", curses.A_DIM)
-                # show short name for debugging
+            if 0 <= r < maxy:
                 try:
-                    safe_addstr(stdscr, r, c + 1, name[:18], curses.A_DIM)
+                    new_lines[r] = _overlay(new_lines[r], c, '[')
+                    new_lines[r] = _overlay(new_lines[r], c + 1, name[:18])
                 except Exception:
                     pass
-            except Exception:
-                pass
 
-    stdscr.refresh()
+    # render initial frame
+    for y, ln in enumerate(new_lines):
+        render_line(stdscr, y, ln)
+    present_frame(stdscr)
 
     while True:
         ch = stdscr.getch()
@@ -1102,11 +1196,17 @@ def curses_map_view(stdscr):
                 # The button "[≡] Kill List" is in row 0 (map_top)
                 # It's positioned near the end of header_line1
                 if my == 0:  # header row
-                    # Check if click is in the approximate area of "[≡] Kill List"
-                    # (on the far right of the header)
-                    if mx >= stdscr.getmaxyx()[1] - 30:
-                        # Clicked on World 4 button
-                        return ("world4_button", False)
+                    # Check if click is in the area of the header button text
+                    try:
+                        maxy, maxx = stdscr.getmaxyx()
+                        btn_text = f"{list_icon} Kill List"
+                        btn_start = maxx - len(btn_text) - 2
+                        if mx >= btn_start:
+                            return ("world4_button", False)
+                    except Exception:
+                        # fallback conservative behavior
+                        if mx >=  stdscr.getmaxyx()[1] - 30:
+                            return ("world4_button", False)
                 
                 # find which zone contains (my+1, mx+1)
                 matched = None
@@ -1118,10 +1218,11 @@ def curses_map_view(stdscr):
                 try:
                     maxy, maxx = stdscr.getmaxyx()
                     dbg = f"Click at {mx},{my} -> {matched[0] if matched else 'NONE'}"
-                    safe_addstr(stdscr, maxy-1, 0, dbg[:maxx-1])
+                    # render to bottom line via render_line so diffing applies
+                    render_line(stdscr, maxy-1, dbg[:maxx-1])
                 except Exception:
                     pass
-                stdscr.refresh()
+                present_frame(stdscr)
                 if matched:
                     # visually highlight the matched zone briefly
                     name, z = matched
@@ -1136,12 +1237,15 @@ def curses_map_view(stdscr):
                         try:
                             stdscr.chgat(y, col0, z_w, curses.A_REVERSE)
                         except Exception:
-                            # fallback: overwrite with reversed slice
+                            # fallback: mark with brackets in the line buffer and render
                             try:
-                                stdscr.addstr(y, col0, map_art[line_idx][0:z_w], curses.A_REVERSE)
+                                # overlay a reversed-look marker using brackets
+                                lbl = map_art[line_idx][0:z_w]
+                                new = _overlay(new_lines[y], col0, '[' + lbl[:max(0, z_w-2)] + ']')
+                                render_line(stdscr, y, new)
                             except Exception:
                                 pass
-                    stdscr.refresh()
+                    present_frame(stdscr)
                     time.sleep(0.25)
                     # After highlighting, enter curses combat UI directly (stay in curses)
                     did = curses_combat(stdscr, name, absolute_zones, map_top)
@@ -1150,6 +1254,12 @@ def curses_map_view(stdscr):
             return None
         elif ch in (ord('k'), ord('K')):
             return (None, False)
+
+        # small sleep to cap redraw rate and reduce CPU usage / flicker
+        try:
+            time.sleep(0.03)
+        except Exception:
+            pass
 
 
 def map_view_fallback():
@@ -1192,48 +1302,83 @@ def map_view_fallback():
 
 def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
     """Run a simple combat UI inside the existing curses session."""
-    curses.curs_set(0)
-    stdscr.clear()
-    stdscr.keypad(True)
-    maxy, maxx = stdscr.getmaxyx()
+    init_curses_window(stdscr)
     enter_combat(location_name=region)
 
     while True:
-        stdscr.erase()
-        # ASCII list icon for World 4
-        list_icon = "[≡]"
+        try:
+            maxy, maxx = stdscr.getmaxyx()
+        except Exception:
+            maxy, maxx = 24, 80
+
+        # build per-line buffer for this frame
+        new_lines = [''] * maxy
         title = f"DUNGEON: {region.replace('_',' ').title()}   Level: {player_level}"
-        safe_addstr(stdscr, 0, 0, title)
-        # draw ascii
+        new_lines[0] = title[:maxx-1]
+
+        # ascii art left/right
         left = ["  (\\_/)", "  (•_•)", " <( : ) ", "  /   \\", "  /___\\\\"]
         right = ["  /\\_/\\"," ( o.o )","  ( : )> ", "  /   \\", "  /___\\\\"]
         for i in range(5):
-            safe_addstr(stdscr, 2 + i, 0, left[i])
+            y = 2 + i
+            if y >= maxy:
+                break
+            # left art
+            new_lines[y] = left[i][:maxx-1]
+            # right art positioned near right side
             try:
-                safe_addstr(stdscr, 2 + i, maxx - 20, right[i])
+                col = maxx - 20
+                if col > 0:
+                    line = new_lines[y]
+                    if len(line) < col:
+                        line = line + ' ' * (col - len(line))
+                    line = (line[:col] + right[i])[:maxx-1]
+                    new_lines[y] = line
             except Exception:
                 pass
 
         # HP bars
-        safe_addstr(stdscr, 8, 0, f"Player HP: {player_hp}/{player_max_hp} ")
-        safe_addstr(stdscr, 9, 0, format_bar(player_hp, player_max_hp, min(30, maxx-20)))
+        if 8 < maxy:
+            new_lines[8] = f"Player HP: {player_hp}/{player_max_hp} "[:maxx-1]
+        if 9 < maxy:
+            new_lines[9] = format_bar(player_hp, player_max_hp, min(30, maxx-20))[:maxx-1]
         try:
-            safe_addstr(stdscr, 8, maxx - 40, f"Enemy HP: {enemy_hp}/{enemy_max_hp}")
-            safe_addstr(stdscr, 9, maxx - 40, format_bar(enemy_hp, enemy_max_hp, min(30, maxx-20)))
+            if 8 < maxy:
+                col = maxx - 40
+                if col > 0:
+                    line = new_lines[8]
+                    if len(line) < col:
+                        line = line + ' ' * (col - len(line))
+                    line = (line[:col] + f"Enemy HP: {enemy_hp}/{enemy_max_hp}")[:maxx-1]
+                    new_lines[8] = line
+            if 9 < maxy:
+                col = maxx - 40
+                if col > 0:
+                    line = new_lines[9]
+                    if len(line) < col:
+                        line = line + ' ' * (col - len(line))
+                    line = (line[:col] + format_bar(enemy_hp, enemy_max_hp, min(30, maxx-20)))[:maxx-1]
+                    new_lines[9] = line
         except Exception:
             pass
 
         # combat log
-        safe_addstr(stdscr, 11, 0, "-- Combat Log --")
-        for i, msg in enumerate(combat_log[-(maxy-18):], start=0):
-            if 12 + i < maxy - 4:
-                safe_addstr(stdscr, 12 + i, 0, msg[:maxx-1])
+        if 11 < maxy:
+            new_lines[11] = "-- Combat Log --"
+            for i, msg in enumerate(combat_log[-(maxy-18):], start=0):
+                y = 12 + i
+                if y < maxy - 4:
+                    new_lines[y] = msg[:maxx-1]
 
         # actions
-        actions = "[A] Attack   [H] Heal   [U] Ability   [K] Back"
-        safe_addstr(stdscr, maxy-2, 0, actions[:maxx-1])
+        if maxy - 2 >= 0:
+            new_lines[maxy-2] = "[A] Attack   [H] Heal   [U] Ability   [K] Back"[:maxx-1]
 
-        stdscr.refresh()
+        # render frame
+        for y, ln in enumerate(new_lines):
+            render_line(stdscr, y, ln)
+        present_frame(stdscr)
+
         ch = stdscr.getch()
         if ch in (ord('a'), ord('A')):
             perform_player_action('attack')
@@ -1254,11 +1399,17 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
             except Exception:
                 pass
             return True
+        # small sleep to cap redraw/input polling rate
+        try:
+            time.sleep(0.03)
+        except Exception:
+            pass
+
         # check combat end
         if not combat_started:
             # display final messages until keypress
-            safe_addstr(stdscr, maxy-3, 0, "Combat ended. Press any key to continue...")
-            stdscr.refresh()
+            render_line(stdscr, maxy-3, "Combat ended. Press any key to continue...")
+            present_frame(stdscr)
             stdscr.getch()
             try:
                 globals()['world'] = 1
