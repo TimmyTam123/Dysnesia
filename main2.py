@@ -312,6 +312,42 @@ def research_view():
         time.sleep(0.1)
 
 
+def kill_list_view():
+    """Render the World 4 kill list once and only re-render when it changes.
+    Blocks until the user presses [K] to go back to the map or [Q] to quit."""
+    global world, killed_monsters
+    last_snapshot = None
+    need_render = True
+    while world == 4:
+        if need_render:
+            clear()
+            print("=== KILL LIST ===\n")
+            print("Monsters killed:\n")
+            if killed_monsters:
+                for i, name in enumerate(killed_monsters, start=1):
+                    print(f"{i}. {name}")
+            else:
+                print("[No kills yet]\n")
+            print("\nPress [K] to go back to Map.")
+            last_snapshot = list(killed_monsters)
+            need_render = False
+
+        key = get_key()
+        if key:
+            k = key.lower()
+            if k == 'k':
+                world = 2
+                return
+            elif k == 'q':
+                sys.exit(0)
+
+        # Re-render if the kill list changed while viewing
+        if killed_monsters != last_snapshot:
+            need_render = True
+
+        time.sleep(0.1)
+
+
 def home_view():
     """Render World 1 main city/upgrades page only when state changes."""
     global money, timea, page, world, w1upgrades
@@ -352,12 +388,11 @@ def home_view():
             last_upgrades = w1upgrades
             need_render = False
 
-        # update money timer
+        # update money timer (don't force redraw here; render only when value changed)
         timea += 0.1
         if timea >= 1:
             money += rate * adminmultiplier * othermultiplier
             timea = 0.0
-            need_render = True
 
         key = get_key()
         if key:
@@ -1987,29 +2022,7 @@ def main():
                 time.sleep(0.1)
                 continue
             if world == 1 and page == 0:
-                timea += 0.1
-                if timea >= 1:
-                    money += rate * adminmultiplier * othermultiplier
-                    timea = 0.0
-
-                print(f"Money: {money:.2f}\n")
-                update_building_heights(w1upgrades)
-                draw_city()
-
-                print("\n=== UPGRADES ===")
-                any_seen = False
-                for upg in upgrades:
-                    if money >= upg["cost"] * 0.1: upg["seen"] = True
-                    if upg["seen"]:
-                        any_seen = True
-                        status = f"+{upg['rate_inc']}/sec | Cost: ${upg['cost']}" if upg["count"] < upg["max"] else "MAXED"
-                        print(f"[{upg['key'].upper()}] {upg['name']} ({upg['count']}/{upg['max']}) {status}")
-                if not any_seen: print("(No upgrades available yet...)")
-                if research_page_unlocked: print("\nPress [R] to go to Research.")
-                if technology_page_unlocked: print("Press [T] to go to Technology.")
-                sanity = 20 - w1upgrades
-                bar = int((sanity / 20) * length)
-                print("\n[" + "#" * bar + " " * (length - bar) + "]\n")
+                home_view()
 
             # --- WORLD 2 MAP VIEW (curses) ---
             if world == 2:
@@ -2059,14 +2072,7 @@ def main():
 
             # --- WORLD 4 KILL LIST ---
             if world == 4:
-                print("=== KILL LIST ===\n")
-                print("Monsters killed:\n")
-                if killed_monsters:
-                    for i, name in enumerate(killed_monsters, start=1):
-                        print(f"{i}. {name}")
-                else:
-                    print("[No kills yet]\n")
-                print("\nPress [K] to go back to Map.")
+                kill_list_view()
 
             # --- INPUT HANDLING ---
 
