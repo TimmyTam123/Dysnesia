@@ -4,33 +4,34 @@ import time
 import select
 import random
 import unicodedata
-import curses
+try:
+    import curses
+    HAVE_CURSES = True
+except Exception:
+    curses = None
+    HAVE_CURSES = False
+    # On Windows, try to install the `windows-curses` package automatically
+    if sys.platform == "win32":
+        try:
+            import subprocess
+            import importlib
+            print("`curses` not found — attempting to install `windows-curses`...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "windows-curses"])
+            # try to import again
+            curses = importlib.import_module("curses")
+            HAVE_CURSES = True
+            print("Successfully installed `windows-curses`.")
+        except Exception:
+            # installation failed — leave HAVE_CURSES False and continue with fallback
+            curses = None
+            HAVE_CURSES = False
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
-# --- CROSS-PLATFORM get_char and safe_addstr ---
+# --- CROSS-PLATFORM get_char ---
 USING_WINDOWS = sys.platform == "win32"
 if USING_WINDOWS:
     import msvcrt
-
-    def safe_addstr(win, y, x, text, attr=0):
-        """Windows curses may crash on wide unicode. Wrap addstr safely."""
-        try:
-            win.addstr(y, x, text, attr)
-        except Exception:
-            # try printing character-by-character to avoid wide-char crashes
-            safe = ""
-            for ch in text:
-                try:
-                    win.addstr(y, x + len(safe), ch, attr)
-                    safe += ch
-                except Exception:
-                    try:
-                        win.addstr(y, x + len(safe), "?", attr)
-                        safe += "?"
-                    except Exception:
-                        pass
-            return
 
     def get_char():
         if msvcrt.kbhit():
@@ -40,37 +41,9 @@ if USING_WINDOWS:
             except Exception:
                 return None
         return None
-
-    fd = None
-    old_settings = None
 else:
     import termios
     import tty
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setcbreak(fd)
-    except Exception:
-        pass
-
-    def safe_addstr(win, y, x, text, attr=0):
-        """Wrap addstr to avoid crashes on wide unicode by falling back per-char."""
-        try:
-            win.addstr(y, x, text, attr)
-        except Exception:
-            safe = ""
-            for ch in text:
-                try:
-                    win.addstr(y, x + len(safe), ch, attr)
-                    safe += ch
-                except Exception:
-                    try:
-                        win.addstr(y, x + len(safe), "?", attr)
-                        safe += "?"
-                    except Exception:
-                        pass
-            return
 
     def get_char():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
@@ -81,12 +54,27 @@ else:
 def flush_stdin(timeout=0.01):
     """Drain any pending bytes from stdin to avoid leftover escape sequences."""
     try:
-        while True:
-            dr, _, _ = select.select([sys.stdin], [], [], timeout)
-            if not dr:
-                break
-            # read and discard
-            sys.stdin.read(1024)
+        if USING_WINDOWS:
+            # drain msvcrt buffer
+            import msvcrt
+            start = time.time()
+            while time.time() - start < timeout:
+                if not msvcrt.kbhit():
+                    break
+                try:
+                    msvcrt.getch()
+                except Exception:
+                    break
+        else:
+            while True:
+                dr, _, _ = select.select([sys.stdin], [], [], timeout)
+                if not dr:
+                    break
+                # read and discard
+                try:
+                    sys.stdin.read(1024)
+                except Exception:
+                    break
     except Exception:
         pass
 
@@ -109,6 +97,9 @@ SHOW_ZONE_DEBUG = False
 def get_cursor_position(timeout=0.05):
     """Query terminal for current cursor position. Returns (row, col) or None on failure."""
     # DSR - Device Status Report (CPR)
+    # Not reliable on Windows consoles; only attempt on POSIX
+    if USING_WINDOWS or not hasattr(sys.stdin, 'fileno'):
+        return None
     try:
         sys.stdout.write('\x1b[6n')
         sys.stdout.flush()
@@ -129,6 +120,394 @@ def get_cursor_position(timeout=0.05):
     except Exception:
         pass
     return None
+
+
+# --- Curses helpers for reduced-flicker rendering ---
+def sanitize_for_curses(s):
+    out = []
+    for ch in s:
+        try:
+            if unicodedata.combining(ch):
+                continue
+            if unicodedata.east_asian_width(ch) in ("W", "F"):
+                out.append('?')
+            else:
+                out.append(ch)
+        except Exception:
+            out.append('?')
+    return ''.join(out)
+
+
+def init_curses_window(win):
+    """Initialize curses window for smoother drawing."""
+    try:
+        curses.noecho()
+    except Exception:
+        pass
+    try:
+        curses.curs_set(0)
+    except Exception:
+        pass
+    try:
+        win.keypad(True)
+    except Exception:
+        pass
+    try:
+        win.nodelay(True)
+    except Exception:
+        pass
+    try:
+        curses.use_default_colors()
+    except Exception:
+        pass
+    # attach a simple last-screen buffer to the window object
+    try:
+        maxy, maxx = win.getmaxyx()
+        if not hasattr(win, '_last_screen') or len(win._last_screen) != maxy:
+            win._last_screen = [''] * maxy
+    except Exception:
+        pass
+
+
+def safe_addstr(win, y, x, text, attr=0):
+    """Try to add text; on failure sanitize and retry with fewer risky chars.
+    This replaces the previous platform-specific per-char fallbacks for speed."""
+    try:
+        win.addstr(y, x, text, attr)
+        return
+    except Exception:
+        pass
+
+    san = sanitize_for_curses(text)
+    try:
+        win.addstr(y, x, san, attr)
+        return
+    except Exception:
+        pass
+
+    # final fallback: write in small chunks to reduce per-char overhead
+    try:
+        chunk = ''
+        for ch in san:
+            chunk += ch
+            if len(chunk) >= 8:
+                try:
+                    win.addstr(y, x + len(chunk) - len(chunk), chunk, attr)
+                except Exception:
+                    pass
+                chunk = ''
+        if chunk:
+            try:
+                win.addstr(y, x + len(text) - len(chunk), chunk, attr)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def render_line(win, y, text):
+    """Render a single line only if it changed (line-diffing)."""
+    try:
+        maxy, maxx = win.getmaxyx()
+    except Exception:
+        return
+    if y < 0 or y >= maxy:
+        return
+    # create a padded version so we clear any leftover characters from previous content
+    line = text[:maxx-1]
+    try:
+        line_padded = line.ljust(maxx-1)
+    except Exception:
+        line_padded = line
+    last = getattr(win, '_last_screen', None)
+    if last is None:
+        try:
+            win._last_screen = [''] * maxy
+            last = win._last_screen
+        except Exception:
+            last = None
+    if last is not None and last[y] == line_padded:
+        return
+    try:
+        safe_addstr(win, y, 0, line_padded)
+        if last is not None:
+            last[y] = line_padded
+    except Exception:
+        pass
+
+
+def present_frame(win):
+    """Batch refresh using noutrefresh()/doupdate() when available."""
+    try:
+        win.noutrefresh()
+        curses.doupdate()
+    except Exception:
+        try:
+            win.refresh()
+        except Exception:
+            pass
+
+
+def research_view():
+    """Handle the research page: only redraw when money increases or research bought."""
+    global money, timea, page, world, research_needs_update, last_money_for_research
+    # initial render
+    need_render = True
+    if last_money_for_research is None:
+        need_render = True
+
+    while world == 1 and page == 1:
+        if need_render:
+            clear()
+            if not research_page_unlocked:
+                print("Research not unlocked yet.")
+            else:
+                print(f"Money: {money:.2f}\n")
+                print("=== RESEARCH ===\n")
+                draw_research_tree()
+                for res in research:
+                    st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
+                    print(f"[{res['key']}] {res['name']} {st}")
+            if research_page_unlocked:
+                print("\nPress [R] to switch pages.")
+            last_money_for_research = money
+            research_needs_update = False
+            need_render = False
+
+        # handle input and money ticks locally so we don't redraw unnecessarily
+        key = get_key()
+        timea += 0.1
+        if timea >= 1:
+            money += rate * adminmultiplier * othermultiplier
+            timea = 0.0
+            research_needs_update = True
+
+        if key:
+            k = key.lower()
+            if k == 'k':
+                if world == 1:
+                    world = 2
+                elif world == 2:
+                    world = 1
+                elif world == 3:
+                    world = 1
+                return
+            elif k == 'q':
+                sys.exit(0)
+            elif k == 'r' and research_page_unlocked:
+                page = 0
+                return
+            else:
+                for r in research:
+                    if k == r["key"]:
+                        buy_research(r)
+                        research_needs_update = True
+                        need_render = True
+                        break
+
+        # decide if we need to re-render due to money change or purchases
+        if research_needs_update or (last_money_for_research is not None and money > last_money_for_research):
+            need_render = True
+
+        time.sleep(0.1)
+
+
+def kill_list_view():
+    """Render the World 4 kill list once and only re-render when it changes.
+    Blocks until the user presses [K] to go back to the map or [Q] to quit."""
+    global world, killed_monsters
+    last_snapshot = None
+    need_render = True
+    while world == 4:
+        if need_render:
+            clear()
+            print("=== KILL LIST ===\n")
+            print("Monsters killed:\n")
+            if killed_monsters:
+                for i, name in enumerate(killed_monsters, start=1):
+                    print(f"{i}. {name}")
+            else:
+                print("[No kills yet]\n")
+            print("\nPress [K] to go back to Map.")
+            last_snapshot = list(killed_monsters)
+            need_render = False
+
+        key = get_key()
+        if key:
+            k = key.lower()
+            if k == 'k':
+                world = 2
+                return
+            elif k == 'q':
+                sys.exit(0)
+
+        # Re-render if the kill list changed while viewing
+        if killed_monsters != last_snapshot:
+            need_render = True
+
+        time.sleep(0.1)
+
+
+def home_view():
+    """Render World 1 main city/upgrades page only when state changes."""
+    global money, timea, page, world, w1upgrades
+    last_money = None
+    last_upgrades = None
+    need_render = True
+
+    while world == 1 and page == 0:
+        if need_render:
+            clear()
+            print(f"Money: {money:.2f}\n")
+            update_building_heights(w1upgrades)
+            draw_city()
+
+            print("\n=== UPGRADES ===")
+            any_seen = False
+            for upg in upgrades:
+                if money >= upg["cost"] * 0.1:
+                    upg["seen"] = True
+                if upg["seen"]:
+                    any_seen = True
+                    status = (
+                        f"+{upg['rate_inc']}/sec | Cost: ${upg['cost']}"
+                        if upg["count"] < upg["max"] else "MAXED"
+                    )
+                    print(f"[{upg['key'].upper()}] {upg['name']} ({upg['count']}/{upg['max']}) {status}")
+            if not any_seen:
+                print("(No upgrades available yet...)")
+            if research_page_unlocked:
+                print("\nPress [R] to go to Research.")
+            if technology_page_unlocked:
+                print("Press [T] to go to Technology.")
+            sanity = 20 - w1upgrades
+            bar = int((sanity / 20) * length)
+            print("\n[" + "#" * bar + " " * (length - bar) + "]\n")
+
+            last_money = money
+            last_upgrades = w1upgrades
+            need_render = False
+
+        # update money timer (don't force redraw here; render only when value changed)
+        timea += 0.1
+        if timea >= 1:
+            money += rate * adminmultiplier * othermultiplier
+            timea = 0.0
+
+        key = get_key()
+        if key:
+            k = key.lower()
+            if k == 'k':
+                world = 2
+                return
+            elif k == 'q':
+                sys.exit(0)
+            elif k == 'r' and research_page_unlocked:
+                page = 1
+                return
+            elif k == 't' and technology_page_unlocked:
+                page = 2
+                return
+            else:
+                for upg in upgrades:
+                    if k == upg["key"]:
+                        buy_upgrade(upg)
+                        need_render = True
+                        break
+
+        # re-render if money or upgrades changed externally
+        if money != last_money or w1upgrades != last_upgrades:
+            need_render = True
+
+        time.sleep(0.1)
+
+
+def mining_view():
+    """Render mining page only when relevant state changes."""
+    global money, timea, page, world, current_ore, ore_hp, depth
+    last_money = None
+    last_ore_hp = None
+    last_depth = None
+    need_render = True
+
+    while world == 1 and page == 2:
+        if not technology_page_unlocked:
+            clear()
+            print("Mining not unlocked yet.")
+            print("\nPress [R] to return to City")
+            key = get_key()
+            if key and key.lower() == 'r':
+                page = 0
+                return
+            time.sleep(0.1)
+            continue
+
+        # time and auto-mining
+        timea += 0.1
+        if timea >= 1:
+            money += rate * adminmultiplier * othermultiplier
+            auto_mine_tick()
+            timea = 0.0
+            need_render = True
+
+        if need_render:
+            clear()
+            # Left column
+            print(f"Money: ${money:.2f}")
+            print("")
+            if current_ore is None:
+                spawn_new_ore()
+            draw_mine_shaft()
+
+            # Right column: technology list
+            print("=== TECHNOLOGY ===")
+            available = []
+            for tech in technology:
+                if not tech.get("purchased"):
+                    available.append(tech)
+            if not available:
+                print("(None available)")
+            else:
+                for tech in available:
+                    ore_costs = " ".join(f"{n[:3]}:{a}" for n, a in tech.get("ore_costs", {}).items())
+                    print(f"[{tech['key'].upper()}] {tech['name']} - {ore_costs} | ${tech['money_cost']}")
+
+            last_money = money
+            last_ore_hp = ore_hp
+            last_depth = depth
+            need_render = False
+
+        key = get_key()
+        if key:
+            k = key.lower()
+            if k == ' ':
+                mine_ore()
+                need_render = True
+            elif k == 'k':
+                world = 2
+                return
+            elif k == 'q':
+                sys.exit(0)
+            elif k == 'r':
+                page = 0
+                return
+            elif k in '12345':
+                new_depth = int(k)
+                if new_depth <= max_depth:
+                    depth = new_depth
+                    spawn_new_ore()
+                    need_render = True
+            else:
+                for tech in technology:
+                    if k == tech["key"]:
+                        buy_technology(tech)
+                        need_render = True
+                        break
+
+        if money != last_money or ore_hp != last_ore_hp or depth != last_depth:
+            need_render = True
+
+        time.sleep(0.1)
 
 # --- GAME STATE ---
 world = 1
@@ -160,6 +539,9 @@ def ships_money_multiplier():
     except Exception:
         return 1.0
 
+# research rendering state
+last_money_for_research = None
+research_needs_update = True
 
 # --- MINING STATE ---
 current_ore = None
@@ -885,6 +1267,12 @@ def buy_upgrade(upg):
     w1upgrades += 1
     if upg["name"] == "Unlock Research":
         research_page_unlocked = True
+    # mark research page to update when viewing
+    try:
+        global research_needs_update
+        research_needs_update = True
+    except Exception:
+        pass
     if upg["count"] < upg["max"]:
         upg["cost"] = int(upg["cost"] * upg["multiplier"])
 
@@ -895,6 +1283,12 @@ def buy_research(res):
     money -= res["cost"]
     res["purchased"] = True
     exec(res["effect"], globals())
+    # ensure research view will re-render
+    try:
+        global research_needs_update
+        research_needs_update = True
+    except Exception:
+        pass
 
 
 def buy_technology(tech):
@@ -1179,52 +1573,98 @@ def perform_player_action(action):
 def curses_map_view(stdscr):
     """Draw the map using curses and wait for a mouse click on a labeled region.
     Returns the normalized region name (key in click_labels) or None if canceled."""
-    curses.curs_set(0)
-    stdscr.clear()
-    stdscr.keypad(True)
-    curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+    init_curses_window(stdscr)
+    # enable mouse reporting where available
+    try:
+        curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+    except Exception:
+        pass
 
     # ASCII list icon for World 4: [≡]
     list_icon = "[≡]"
-    header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}                                                                                                  {list_icon} Kill List"
+    # keep header compact to avoid wrapping issues on narrow terminals
+    header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}   {list_icon} Kill List"
     header_lines = [header_line1, "Click on locations to enter the dungeon.", ""]
-    # draw header
+    # prepare a full-screen line buffer and render only changed lines
+    try:
+        maxy, maxx = stdscr.getmaxyx()
+    except Exception:
+        maxy, maxx = 24, 80
+    new_lines = [''] * maxy
     for i, line in enumerate(header_lines):
-        safe_addstr(stdscr, i, 0, line)
+        if i < maxy:
+            new_lines[i] = line[:maxx-1]
 
     map_top = len(header_lines)
-    # draw map lines
-    for i, line in enumerate(map_art):
-        try:
-            safe_addstr(stdscr, map_top + i, 0, line)
-        except Exception:
-            # if terminal too small, truncate
-            try:
-                maxx = stdscr.getmaxyx()[1]
-                safe_addstr(stdscr, map_top + i, 0, line[:maxx-1])
-            except Exception:
-                pass
+    # scrolling state
+    visible_height = max(0, maxy - map_top - 1)
+    map_scroll = 0
+
+    def draw_map():
+        # rebuild new_lines for current scroll
+        for i, line in enumerate(header_lines):
+            if i < maxy:
+                new_lines[i] = line[:maxx-1]
+        # fill visible slice of map_art
+        for vis_i in range(visible_height):
+            art_idx = map_scroll + vis_i
+            dest = map_top + vis_i
+            if dest >= maxy:
+                break
+            if art_idx < len(map_art):
+                new_lines[dest] = map_art[art_idx][:maxx-1]
+            else:
+                new_lines[dest] = ''
+
+        # overlay debug markers for visible zones
+        if SHOW_ZONE_DEBUG:
+            for name, z in absolute_zones.items():
+                # compute displayed row for zone (1-based to match earlier math)
+                disp_row_start = z["row_start"] - map_scroll
+                disp_row_idx = disp_row_start - 1
+                if map_top <= disp_row_idx < map_top + visible_height:
+                    try:
+                        r = disp_row_idx
+                        c = z["col_start"] - 1
+                        new_lines[r] = _overlay(new_lines[r], c, '[')
+                        new_lines[r] = _overlay(new_lines[r], c + 1, name[:18])
+                    except Exception:
+                        pass
+
+    # initial draw
+    draw_map()
 
     # compute zones in display coords using existing helper
     # pass map_top+1 (1-based row index) so calculations align with zone math
     absolute_zones = make_absolute_zones(map_art, map_top + 1)
 
-    # draw debug boxes (optional) - we'll draw short markers at label starts
+    # draw debug boxes (optional) - we'll overlay short markers at label starts
+    def _overlay(line, col, txt):
+        if col < 0:
+            return line
+        if col >= len(line):
+            line = line + ' ' * (col - len(line))
+        pre = line[:col]
+        post = ''
+        if col + len(txt) < len(line):
+            post = line[col + len(txt):]
+        return (pre + txt + post)[:maxx-1]
+
     if SHOW_ZONE_DEBUG:
         for name, z in absolute_zones.items():
             r = z["row_start"] - 1
             c = z["col_start"] - 1
-            try:
-                safe_addstr(stdscr, r, c, "[", curses.A_DIM)
-                # show short name for debugging
+            if 0 <= r < maxy:
                 try:
-                    safe_addstr(stdscr, r, c + 1, name[:18], curses.A_DIM)
+                    new_lines[r] = _overlay(new_lines[r], c, '[')
+                    new_lines[r] = _overlay(new_lines[r], c + 1, name[:18])
                 except Exception:
                     pass
-            except Exception:
-                pass
 
-    stdscr.refresh()
+    # render initial frame
+    for y, ln in enumerate(new_lines):
+        render_line(stdscr, y, ln)
+    present_frame(stdscr)
 
     while True:
         ch = stdscr.getch()
@@ -1239,46 +1679,81 @@ def curses_map_view(stdscr):
                 # The button "[≡] Kill List" is in row 0 (map_top)
                 # It's positioned near the end of header_line1
                 if my == 0:  # header row
-                    # Check if click is in the approximate area of "[≡] Kill List"
-                    # (on the far right of the header)
-                    if mx >= stdscr.getmaxyx()[1] - 30:
-                        # Clicked on World 4 button
-                        return ("world4_button", False)
+                    # Check if click is in the area of the header button text
+                    try:
+                        maxy, maxx = stdscr.getmaxyx()
+                        btn_text = f"{list_icon} Kill List"
+                        btn_start = maxx - len(btn_text) - 2
+                        if mx >= btn_start:
+                            return ("world4_button", False)
+                    except Exception:
+                        # fallback conservative behavior
+                        if mx >=  stdscr.getmaxyx()[1] - 30:
+                            return ("world4_button", False)
                 
-                # find which zone contains (my+1, mx+1)
+                # handle mouse wheel (BUTTON4/BUTTON5) if available
+                try:
+                    btn4 = getattr(curses, 'BUTTON4_PRESSED')
+                    btn5 = getattr(curses, 'BUTTON5_PRESSED')
+                except Exception:
+                    btn4 = btn5 = 0
+                if btn4 and (bstate & btn4):
+                    map_scroll = max(0, map_scroll - 3)
+                    draw_map()
+                    for y, ln in enumerate(new_lines):
+                        render_line(stdscr, y, ln)
+                    present_frame(stdscr)
+                    continue
+                if btn5 and (bstate & btn5):
+                    map_scroll = min(max(0, len(map_art) - visible_height), map_scroll + 3)
+                    draw_map()
+                    for y, ln in enumerate(new_lines):
+                        render_line(stdscr, y, ln)
+                    present_frame(stdscr)
+                    continue
+
+                # find which zone contains (my+1, mx+1) taking scroll into account
                 matched = None
                 for name, z in absolute_zones.items():
-                    if z["row_start"] <= my+1 <= z["row_end"] and z["col_start"] <= mx+1 <= z["col_end"]:
+                    disp_row_start = z["row_start"] - map_scroll
+                    disp_row_end = z["row_end"] - map_scroll
+                    if disp_row_start <= my+1 <= disp_row_end and z["col_start"] <= mx+1 <= z["col_end"]:
                         matched = (name, z)
                         break
                 # debug: show click coords and matched zone at bottom
                 try:
                     maxy, maxx = stdscr.getmaxyx()
                     dbg = f"Click at {mx},{my} -> {matched[0] if matched else 'NONE'}"
-                    safe_addstr(stdscr, maxy-1, 0, dbg[:maxx-1])
+                    # render to bottom line via render_line so diffing applies
+                    render_line(stdscr, maxy-1, dbg[:maxx-1])
                 except Exception:
                     pass
-                stdscr.refresh()
+                present_frame(stdscr)
                 if matched:
                     # visually highlight the matched zone briefly
                     name, z = matched
-                    # compute 0-based map_art index for zone start
-                    start_idx = z["row_start"] - (map_top + 1)
+                    # compute 0-based map_art index for zone start, adjusted for scroll
+                    start_idx = z["row_start"] - (map_top + 1) - map_scroll
                     z_h = z["row_end"] - z["row_start"] + 1
                     z_w = z["col_end"] - z["col_start"] + 1
                     col0 = z["col_start"] - 1
                     for i in range(z_h):
                         line_idx = start_idx + i
+                        if line_idx < 0 or line_idx >= visible_height:
+                            continue
                         y = map_top + line_idx
                         try:
                             stdscr.chgat(y, col0, z_w, curses.A_REVERSE)
                         except Exception:
-                            # fallback: overwrite with reversed slice
+                            # fallback: mark with brackets in the line buffer and render
                             try:
-                                stdscr.addstr(y, col0, map_art[line_idx][0:z_w], curses.A_REVERSE)
+                                art_idx = map_scroll + line_idx
+                                lbl = map_art[art_idx][0:z_w]
+                                new = _overlay(new_lines[y], col0, '[' + lbl[:max(0, z_w-2)] + ']')
+                                render_line(stdscr, y, new)
                             except Exception:
                                 pass
-                    stdscr.refresh()
+                    present_frame(stdscr)
                     time.sleep(0.25)
                     # revert the temporary highlight so attributes aren't left set
                     for i in range(z_h):
@@ -1300,51 +1775,155 @@ def curses_map_view(stdscr):
             return None
         elif ch in (ord('k'), ord('K')):
             return (None, False)
+        elif ch == curses.KEY_UP:
+            map_scroll = max(0, map_scroll - 1)
+            draw_map()
+            for y, ln in enumerate(new_lines):
+                render_line(stdscr, y, ln)
+            present_frame(stdscr)
+        elif ch == curses.KEY_DOWN:
+            map_scroll = min(max(0, len(map_art) - visible_height), map_scroll + 1)
+            draw_map()
+            for y, ln in enumerate(new_lines):
+                render_line(stdscr, y, ln)
+            present_frame(stdscr)
+        elif ch == curses.KEY_PPAGE:
+            map_scroll = max(0, map_scroll - visible_height)
+            draw_map()
+            for y, ln in enumerate(new_lines):
+                render_line(stdscr, y, ln)
+            present_frame(stdscr)
+        elif ch == curses.KEY_NPAGE:
+            map_scroll = min(max(0, len(map_art) - visible_height), map_scroll + visible_height)
+            draw_map()
+            for y, ln in enumerate(new_lines):
+                render_line(stdscr, y, ln)
+            present_frame(stdscr)
+
+        # small sleep to cap redraw rate and reduce CPU usage / flicker
+        try:
+            time.sleep(0.03)
+        except Exception:
+            pass
+
+
+def map_view_fallback():
+    """Non-curses fallback for world map selection on platforms without curses.
+    Returns (normalized_name, False) or (None, False) if cancelled."""
+    print("=== WORLD 2: MAP (text mode) ===")
+    print("Click not available — choose a location by number or press [Q] to cancel.")
+    # print map preview
+    for line in map_art:
+        print(line)
+    labels = locate_labels_in_map(map_art)
+    keys = list(labels.keys())
+    if not keys:
+        print("(No labeled locations found)")
+        return (None, False)
+    print("\nLocations:")
+    for i, k in enumerate(keys, start=1):
+        print(f"[{i}] {k.replace('_',' ').title()}")
+    print("[Q] Cancel")
+    # simple input loop
+    while True:
+        try:
+            choice = input("Choose: ").strip()
+        except Exception:
+            return (None, False)
+        if not choice:
+            continue
+        if choice.lower() == 'q':
+            return (None, False)
+        try:
+            n = int(choice)
+            if 1 <= n <= len(keys):
+                return (keys[n-1], False)
+        except ValueError:
+            # allow direct name
+            norm = choice.lower().replace(' ', '_')
+            if norm in keys:
+                return (norm, False)
+        print("Invalid choice.")
 
 def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
     """Run a simple combat UI inside the existing curses session."""
-    curses.curs_set(0)
-    stdscr.clear()
-    stdscr.keypad(True)
-    maxy, maxx = stdscr.getmaxyx()
+    init_curses_window(stdscr)
     enter_combat(location_name=region)
 
     while True:
-        stdscr.erase()
-        # ASCII list icon for World 4
-        list_icon = "[≡]"
+        try:
+            maxy, maxx = stdscr.getmaxyx()
+        except Exception:
+            maxy, maxx = 24, 80
+
+        # build per-line buffer for this frame
+        new_lines = [''] * maxy
         title = f"DUNGEON: {region.replace('_',' ').title()}   Level: {player_level}"
-        safe_addstr(stdscr, 0, 0, title)
-        # draw ascii
+        new_lines[0] = title[:maxx-1]
+
+        # ascii art left/right
         left = ["  (\\_/)", "  (•_•)", " <( : ) ", "  /   \\", "  /___\\\\"]
         right = ["  /\\_/\\"," ( o.o )","  ( : )> ", "  /   \\", "  /___\\\\"]
         for i in range(5):
-            safe_addstr(stdscr, 2 + i, 0, left[i])
+            y = 2 + i
+            if y >= maxy:
+                break
+            # left art
+            new_lines[y] = left[i][:maxx-1]
+            # right art positioned near right side
             try:
-                safe_addstr(stdscr, 2 + i, maxx - 20, right[i])
+                col = maxx - 20
+                if col > 0:
+                    line = new_lines[y]
+                    if len(line) < col:
+                        line = line + ' ' * (col - len(line))
+                    line = (line[:col] + right[i])[:maxx-1]
+                    new_lines[y] = line
             except Exception:
                 pass
 
         # HP bars
-        safe_addstr(stdscr, 8, 0, f"Player HP: {player_hp}/{player_max_hp} ")
-        safe_addstr(stdscr, 9, 0, format_bar(player_hp, player_max_hp, min(30, maxx-20)))
+        if 8 < maxy:
+            new_lines[8] = f"Player HP: {player_hp}/{player_max_hp} "[:maxx-1]
+        if 9 < maxy:
+            new_lines[9] = format_bar(player_hp, player_max_hp, min(30, maxx-20))[:maxx-1]
         try:
-            safe_addstr(stdscr, 8, maxx - 40, f"Enemy HP: {enemy_hp}/{enemy_max_hp}")
-            safe_addstr(stdscr, 9, maxx - 40, format_bar(enemy_hp, enemy_max_hp, min(30, maxx-20)))
+            if 8 < maxy:
+                col = maxx - 40
+                if col > 0:
+                    line = new_lines[8]
+                    if len(line) < col:
+                        line = line + ' ' * (col - len(line))
+                    line = (line[:col] + f"Enemy HP: {enemy_hp}/{enemy_max_hp}")[:maxx-1]
+                    new_lines[8] = line
+            if 9 < maxy:
+                col = maxx - 40
+                if col > 0:
+                    line = new_lines[9]
+                    if len(line) < col:
+                        line = line + ' ' * (col - len(line))
+                    line = (line[:col] + format_bar(enemy_hp, enemy_max_hp, min(30, maxx-20)))[:maxx-1]
+                    new_lines[9] = line
         except Exception:
             pass
 
         # combat log
-        safe_addstr(stdscr, 11, 0, "-- Combat Log --")
-        for i, msg in enumerate(combat_log[-(maxy-18):], start=0):
-            if 12 + i < maxy - 4:
-                safe_addstr(stdscr, 12 + i, 0, msg[:maxx-1])
+        if 11 < maxy:
+            new_lines[11] = "-- Combat Log --"
+            for i, msg in enumerate(combat_log[-(maxy-18):], start=0):
+                y = 12 + i
+                if y < maxy - 4:
+                    new_lines[y] = msg[:maxx-1]
 
         # actions
-        actions = "[A] Attack   [H] Heal   [U] Ability   [K] Back"
-        safe_addstr(stdscr, maxy-2, 0, actions[:maxx-1])
+        if maxy - 2 >= 0:
+            new_lines[maxy-2] = "[A] Attack   [H] Heal   [U] Ability   [K] Back"[:maxx-1]
 
-        stdscr.refresh()
+        # render frame
+        for y, ln in enumerate(new_lines):
+            render_line(stdscr, y, ln)
+        present_frame(stdscr)
+
         ch = stdscr.getch()
         if ch in (ord('a'), ord('A')):
             perform_player_action('attack')
@@ -1377,11 +1956,17 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
             except Exception:
                 pass
             return True
+        # small sleep to cap redraw/input polling rate
+        try:
+            time.sleep(0.03)
+        except Exception:
+            pass
+
         # check combat end
         if not combat_started:
             # display final messages until keypress
-            safe_addstr(stdscr, maxy-3, 0, "Combat ended. Press any key to continue...")
-            stdscr.refresh()
+            render_line(stdscr, maxy-3, "Combat ended. Press any key to continue...")
+            present_frame(stdscr)
             stdscr.getch()
             try:
                 globals()['world'] = 1
@@ -1538,9 +2123,22 @@ def main():
     global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked, blackhole_page_unlocked, blackhole_growth, ships_count, blackhole_unlock_cost
     generate_city_layout()
     spawn_new_ore()  # Add this line
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    tty.setcbreak(fd)
+    # Configure terminal modes on POSIX only; Windows doesn't have termios/tty
+    if not USING_WINDOWS:
+        try:
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setcbreak(fd)
+            except Exception:
+                pass
+        except Exception:
+            fd = None
+            old_settings = None
+    else:
+        fd = None
+        old_settings = None
+
     enable_mouse()
 
     try:
@@ -1892,10 +2490,13 @@ def main():
                 # open a curses-based full-screen map and wait for click
                 # disable raw mouse reporting from the outer code while curses runs
                 disable_mouse()
-                try:
-                    region_res = curses.wrapper(curses_map_view)
-                except Exception:
-                    region_res = (None, False)
+                if HAVE_CURSES:
+                    try:
+                        region_res = curses.wrapper(curses_map_view)
+                    except Exception:
+                        region_res = (None, False)
+                else:
+                    region_res = map_view_fallback()
                 # flush any leftover bytes (escape sequences) so outer loop doesn't misinterpret
                 flush_stdin()
                 # re-enable outer mouse reporting
@@ -1932,14 +2533,7 @@ def main():
 
             # --- WORLD 4 KILL LIST ---
             if world == 4:
-                print("=== KILL LIST ===\n")
-                print("Monsters killed:\n")
-                if killed_monsters:
-                    for i, name in enumerate(killed_monsters, start=1):
-                        print(f"{i}. {name}")
-                else:
-                    print("[No kills yet]\n")
-                print("\nPress [K] to go back to Map.")
+                kill_list_view()
 
             # --- INPUT HANDLING ---
 
@@ -2030,16 +2624,21 @@ def main():
             time.sleep(0.1)
 
     finally:
+        # Always attempt to disable mouse (if enabled), but ignore failures
+        try:
             disable_mouse()
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            # ensure terminal attributes are reset (clear any reverse/inverse modes)
+        except Exception:
+            pass
+
+        # Restore POSIX terminal settings only when we previously changed them
+        if not USING_WINDOWS and fd is not None and old_settings is not None:
             try:
-                sys.stdout.write("\033[0m")
-                sys.stdout.flush()
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             except Exception:
                 pass
-            clear()
-            print("Exited cleanly.")
+
+        clear()
+        print("Exited cleanly.")
 
 if __name__ == "__main__":
     main()
