@@ -135,7 +135,7 @@ world = 1
 timea = 0.0
 money = 0
 rate = 1
-adminmultiplier = 10000
+adminmultiplier = 1000000000000
 othermultiplier = 1.0
 page = 0
 research_page_unlocked = False
@@ -143,6 +143,23 @@ technology_page_unlocked = False
 w1upgrades = 0
 length = 40
 player_level = 1
+
+# --- BLACK HOLE / WORLD1 ALTERNATE PAGE ---
+# Locked by default; unlocked by completing mining end or admin button
+blackhole_page_unlocked = False
+blackhole_growth = 0
+blackhole_upgrades_count = 0
+ships_count = 0
+blackhole_unlock_cost = 5000000000
+
+
+def ships_money_multiplier():
+    """Return a multiplier for money based on ships_count. 5% per ship."""
+    try:
+        return 1.0 + ships_count * 0.05
+    except Exception:
+        return 1.0
+
 
 # --- MINING STATE ---
 current_ore = None
@@ -693,6 +710,164 @@ def draw_city():
         print(line.center(width))
     print("_" * width)
 
+
+# --- BLACK HOLE PAGE: art, upgrades, helpers ---
+def generate_planet_art(size, ships):
+    """Generate a stylized planet with orbiting ships.
+    `size` controls planet radius; `ships` is number of ships on orbit."""
+    import math
+    art_lines = []
+    planet_radius = 2 + size
+    height = planet_radius * 2 + 1
+    width = planet_radius * 4 + 1
+    cx = width // 2
+    cy = height // 2
+
+    # create blank canvas
+    canvas = [[" "] * width for _ in range(height)]
+
+    # draw planet (filled circle)
+    for y in range(height):
+        for x in range(width):
+            dx = (x - cx) / 2.0
+            dy = y - cy
+            dist = math.hypot(dx, dy)
+            if dist <= planet_radius * 0.6:
+                canvas[y][x] = "O"
+            elif dist <= planet_radius * 0.95:
+                canvas[y][x] = "o"
+            elif dist <= planet_radius * 1.15:
+                canvas[y][x] = "~"
+
+    # draw multiple landscape-oriented orbits and distribute ships across them
+    # number of orbits scales with size (at least 1, cap at 5)
+    orbit_count = max(1, min(5, 1 + (size // 2)))
+    # create orbit radii (landscape: rx significantly > ry)
+    orbits = []
+    for j in range(orbit_count):
+        rx = int(planet_radius * (3.2 + j * 1.0))
+        ry = max(1, int(planet_radius * (0.7 + j * 0.25)))
+        orbits.append((rx, ry))
+
+    # dotted orbits (more horizontal emphasis)
+    for (orbit_r_x, orbit_r_y) in orbits:
+        for a in range(0, 360, 8):
+            ang = math.radians(a)
+            ox = int(cx + orbit_r_x * math.cos(ang))
+            oy = int(cy + orbit_r_y * math.sin(ang))
+            if 0 <= oy < height and 0 <= ox < width and canvas[oy][ox] == " ":
+                canvas[oy][ox] = "."
+
+    # ship glyphs to make orbit pretty
+    ship_glyphs = ["▲", "▶", "✦", "◉", "✺", "*", "✶"]
+    if ships > 0:
+        # distribute ships across orbits proportional to orbit size (approx circumference)
+        weights = []
+        for (rx, ry) in orbits:
+            weights.append(rx + ry)
+        total_w = max(1, sum(weights))
+        per_orbit = [max(0, (ships * w) // total_w) for w in weights]
+        # distribute remainder
+        rem = ships - sum(per_orbit)
+        j = 0
+        while rem > 0:
+            per_orbit[j % orbit_count] += 1
+            rem -= 1
+            j += 1
+
+        idx = 0
+        for j, (orbit_r_x, orbit_r_y) in enumerate(orbits):
+            cnt = per_orbit[j]
+            if cnt <= 0:
+                continue
+            # give each orbit a phase offset so ships stagger between rings
+            phase = j * 0.6
+            for k in range(cnt):
+                angle = 2 * math.pi * k / max(1, cnt) + phase
+                sx = int(cx + orbit_r_x * math.cos(angle))
+                sy = int(cy + orbit_r_y * math.sin(angle))
+                if 0 <= sy < height and 0 <= sx < width:
+                    glyph = ship_glyphs[idx % len(ship_glyphs)]
+                    canvas[sy][sx] = glyph
+                idx += 1
+
+    for row in canvas:
+        art_lines.append("".join(row))
+    art_lines.append(" ")
+    art_lines.append(f" Planet Size: {size} | Ships: {ships} ")
+    return art_lines
+
+
+blackhole_upgrades = [
+    {"key": "z", "name": "Siphon Matter", "desc": "+50 rate", "base_cost": 5000000, "cost": 5000000, "multiplier": 1.35, "count": 0, "max": 20, "seen": False},
+    {"key": "x", "name": "Event Horizon", "desc": "+2 ships", "base_cost": 25000000, "cost": 25000000, "multiplier": 1.6, "count": 0, "max": 10, "seen": False},
+    {"key": "c", "name": "Singularity Core", "desc": "+50% other mult", "base_cost": 100000000, "cost": 100000000, "multiplier": 1.5, "count": 0, "max": 6, "seen": False},
+    {"key": "v", "name": "Accretion Ring", "desc": "Grow size", "base_cost": 250000000, "cost": 250000000, "multiplier": 1.35, "count": 0, "max": 8, "seen": False},
+    {"key": "s", "name": "Orbital Dockyards", "desc": "+1 ship", "base_cost": 10000000, "cost": 10000000, "multiplier": 1.5, "count": 0, "max": 50, "seen": False},
+    {"key": "n", "name": "Break The Reality", "desc": "Break the reality", "base_cost": 1000000000, "cost": 1000000000, "multiplier": 0, "count": 0, "max": 1, "seen": False},
+]
+
+
+def buy_blackhole_upgrade(upg):
+    """Purchase and apply black hole upgrade effects."""
+    global money, rate, adminmultiplier, othermultiplier, blackhole_growth, blackhole_upgrades_count, research_page_unlocked, ships_count
+    if upg["count"] >= upg["max"]:
+        return
+    if money < upg["cost"]:
+        return
+    money -= upg["cost"]
+    upg["count"] += 1
+    blackhole_upgrades_count += 1
+
+    # apply effects by key
+    if upg["key"] == "z":
+        rate += 50
+    elif upg["key"] == "x":
+        # Event Horizon now adds ships to the orbit (bigger effect than dockyards)
+        ships_count += 2
+    elif upg["key"] == "c":
+        othermultiplier *= 1.5
+    elif upg["key"] == "v":
+        blackhole_growth += 1
+    elif upg["key"] == "s":
+        ships_count += 1
+    elif upg["key"] == "n":
+        # Breaking the reality unlocks research (keeps original effect)
+        research_page_unlocked = True
+
+    # increase cost for next purchase when multiplier >0
+    if upg.get("multiplier", 0) and upg["multiplier"] > 0:
+        upg["cost"] = int(upg["cost"] * upg["multiplier"])
+
+
+def draw_blackhole_page():
+    """Render the black hole (planet + ships) page to stdout (non-curses)."""
+    global blackhole_growth, ships_count
+    # time-based income handled by main loop
+    art = generate_planet_art(blackhole_growth, ships_count)
+    # center the art to terminal width
+    import shutil
+    term_width = shutil.get_terminal_size().columns
+    for line in art:
+        print(line.center(term_width))
+
+    print("\n=== BLACK HOLE UPGRADES ===\n")
+    any_seen = False
+    for upg in blackhole_upgrades:
+        if money >= upg["cost"] * 0.1: upg["seen"] = True
+        if upg["seen"]:
+            any_seen = True
+            # show count/max; if max == 1, just show count to avoid "/1" clutter
+            if upg['max'] == 1:
+                cnt_str = f"({upg['count']})"
+            else:
+                cnt_str = f"({upg['count']}/{upg['max']})"
+            status = f"Cost: ${upg['cost']} | {cnt_str}"
+            print(f"[{upg['key'].upper()}] {upg['name']} - {upg['desc']} {status}")
+    if not any_seen:
+        print("(No black hole upgrades available yet...)")
+
+
 # --- INPUT / CLEAR ---
 def clear(): os.system("cls" if os.name == "nt" else "clear")
 def get_key():
@@ -1105,10 +1280,23 @@ def curses_map_view(stdscr):
                                 pass
                     stdscr.refresh()
                     time.sleep(0.25)
+                    # revert the temporary highlight so attributes aren't left set
+                    for i in range(z_h):
+                        line_idx = start_idx + i
+                        y = map_top + line_idx
+                        try:
+                            stdscr.chgat(y, col0, z_w, curses.A_NORMAL)
+                        except Exception:
+                            try:
+                                # redraw original text without attributes
+                                stdscr.addstr(y, col0, map_art[line_idx][0:z_w])
+                            except Exception:
+                                pass
+                    stdscr.refresh()
                     # After highlighting, enter curses combat UI directly (stay in curses)
                     did = curses_combat(stdscr, name, absolute_zones, map_top)
                     return (name, bool(did))
-        elif ch in (ord('q'), 27):
+        if ch in (ord('q'), 27):
             return None
         elif ch in (ord('k'), ord('K')):
             return (None, False)
@@ -1171,7 +1359,19 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
             except Exception:
                 pass
             return True
-        elif ch in (ord('q'), 27):
+
+
+        # (Previously there was a nested curses_blackhole_view defined here; removed)
+
+
+        
+
+
+        
+
+
+        
+        if ch in (ord('q'), 27):
             try:
                 globals()['world'] = 1
             except Exception:
@@ -1190,8 +1390,152 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
             return True
 
 
+def curses_blackhole_view(stdscr):
+    """Animated black hole (planet + ships) view using curses."""
+    curses.curs_set(0)
+    stdscr.nodelay(True)
+    stdscr.keypad(True)
+    angle_offset = 0.0
+    import math
+
+    while True:
+        stdscr.erase()
+        maxy, maxx = stdscr.getmaxyx()
+        title = "=== BLACK HOLE - ORBITAL VIEW ==="
+        safe_addstr(stdscr, 0, max(0, (maxx - len(title)) // 2), title)
+
+        # compute planet parameters
+        pr = max(1, 2 + blackhole_growth)
+        pw = pr * 4 + 1
+        cx = maxx // 2
+        cy = maxy // 2
+
+        # draw planet
+        for dy in range(-pr, pr + 1):
+            for dx in range(-pw // 2, pw // 2 + 1):
+                sx = cx + dx
+                sy = cy + dy
+                if sx < 0 or sx >= maxx or sy < 1 or sy >= maxy - 4:
+                    continue
+                d = math.hypot((dx / 2.0), dy)
+                if d <= pr * 0.6:
+                    ch = 'O'
+                elif d <= pr * 0.95:
+                    ch = 'o'
+                elif d <= pr * 1.15:
+                    ch = '~'
+                else:
+                    ch = ' '
+                try:
+                    safe_addstr(stdscr, sy, sx, ch)
+                except Exception:
+                    pass
+
+        # multiple landscape orbits (rx > ry) and animated ships
+        orbit_count = max(1, min(5, 1 + (blackhole_growth // 2)))
+        orbits = []
+        for j in range(orbit_count):
+            rx = int(pr * (3.2 + j * 1.0))
+            ry = max(1, int(pr * (0.7 + j * 0.25)))
+            orbits.append((rx, ry))
+
+        # draw dotted orbits (landscape emphasis)
+        for j, (orbit_rx, orbit_ry) in enumerate(orbits):
+            step = 10
+            for a in range(0, 360, step):
+                ang = math.radians(a + int(angle_offset * (0.5 + j * 0.3)))
+                ox = int(cx + (orbit_rx * math.cos(ang)))
+                oy = int(cy + (orbit_ry * math.sin(ang)))
+                if 1 <= oy < maxy - 4 and 0 <= ox < maxx:
+                    try:
+                        safe_addstr(stdscr, oy, ox, '.')
+                    except Exception:
+                        pass
+
+        # distribute ships across orbits proportional to orbit size
+        ship_glyphs = ['▲', '◆', '✦', '✸', '✺', '✶', '✹']
+        if ships_count > 0:
+            weights = [(rx + ry) for (rx, ry) in orbits]
+            total_w = max(1, sum(weights))
+            per_orbit = [max(0, (ships_count * w) // total_w) for w in weights]
+            rem = ships_count - sum(per_orbit)
+            jj = 0
+            while rem > 0:
+                per_orbit[jj % orbit_count] += 1
+                rem -= 1
+                jj += 1
+
+            idx = 0
+            for j, (orbit_rx, orbit_ry) in enumerate(orbits):
+                cnt = per_orbit[j]
+                if cnt <= 0:
+                    continue
+                phase = j * 0.7
+                for k in range(cnt):
+                    ang = 2 * math.pi * k / max(1, cnt) + (angle_offset / (6.0 + j)) + phase
+                    sx = int(cx + (orbit_rx * math.cos(ang)))
+                    sy = int(cy + (orbit_ry * math.sin(ang)))
+                    glyph = ship_glyphs[idx % len(ship_glyphs)]
+                    try:
+                        if 1 <= sy < maxy - 4 and 0 <= sx < maxx:
+                            safe_addstr(stdscr, sy, sx, glyph)
+                    except Exception:
+                        pass
+                    idx += 1
+
+        # Right column: upgrades and info
+        col = maxx - 38
+        if col < pw + 5:
+            col = pw + 6
+        try:
+            safe_addstr(stdscr, 2, col, f"Money: ${money:.2f}")
+            safe_addstr(stdscr, 3, col, f"Ships: {ships_count}  (mult x{ships_money_multiplier():.2f})")
+            safe_addstr(stdscr, 4, col, f"Planet Size: {blackhole_growth}")
+            safe_addstr(stdscr, 6, col, "=== BLACK HOLE UPGRADES ===")
+            ry = 7
+            for upg in blackhole_upgrades:
+                seen = upg.get('seen', False) or (money >= upg['cost'] * 0.1)
+                if seen:
+                    # if this upgrade has max==1, avoid showing "/1"
+                    if upg['max'] == 1:
+                        cnt_str = f"({upg['count']})"
+                    else:
+                        cnt_str = f"({upg['count']}/{upg['max']})"
+                    status = f"${upg['cost']} {cnt_str}"
+                    safe_addstr(stdscr, ry, col, f"[{upg['key'].upper()}] {upg['name']}")
+                    safe_addstr(stdscr, ry + 1, col, f"   {upg['desc']} - {status}")
+                    ry += 2
+            safe_addstr(stdscr, maxy - 3, col, "[K] Back   [Q] Quit")
+        except Exception:
+            pass
+
+        stdscr.refresh()
+
+        # handle input
+        try:
+            ch = stdscr.getch()
+        except Exception:
+            ch = -1
+
+        if ch != -1:
+            try:
+                c = chr(ch).lower()
+            except Exception:
+                c = ''
+            if c in ('k', 'r'):
+                return
+            if c in ('q', '\x1b'):
+                return
+            for upg in blackhole_upgrades:
+                if c == upg['key']:
+                    buy_blackhole_upgrade(upg)
+                    break
+
+        angle_offset += 6.0
+        time.sleep(0.08)
+
 def main():
-    global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked
+    global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked, blackhole_page_unlocked, blackhole_growth, ships_count, blackhole_unlock_cost
     generate_city_layout()
     spawn_new_ore()  # Add this line
     fd = sys.stdin.fileno()
@@ -1211,7 +1555,9 @@ def main():
                     print(f"Money: {money:.2f}\n")
                     timea += 0.1
                     if timea >= 1:
-                        money += rate * adminmultiplier * othermultiplier
+                        money += (
+                            rate * adminmultiplier * othermultiplier * ships_money_multiplier()
+                        )
                         timea = 0.0
                     print("=== RESEARCH ===\n")
                     draw_research_tree()
@@ -1243,7 +1589,9 @@ def main():
                     # Time and auto-mining
                     timea += 0.1
                     if timea >= 1:
-                        money += rate * adminmultiplier * othermultiplier
+                        money += (
+                            rate * adminmultiplier * othermultiplier * ships_money_multiplier()
+                        )
                         auto_mine_tick()
                         timea = 0.0
                     
@@ -1308,6 +1656,12 @@ def main():
                     left_content.append("[SPACE] Mine")
                     left_content.append("[R] Return to City")
                     left_content.append("[1-5] Change Depth")
+                    # Offer Black Hole unlock when player has reached end of mining (depth 5)
+                    if max_depth >= 5 and not blackhole_page_unlocked:
+                        left_content.append("")
+                        left_content.append("=== BLACK HOLE ===")
+                        left_content.append(f"[U] Unlock Black Hole - Cost: ${blackhole_unlock_cost}")
+                        left_content.append("(Requires Depth 5)")
                     
                     # Right column content - Tech Tree
                     right_content = []
@@ -1414,6 +1768,14 @@ def main():
                         break
                     elif k == 'r': 
                         page = 0
+                    elif k == 'u' and max_depth >= 5 and not blackhole_page_unlocked:
+                        # Unlock black hole from mining end
+                        if money >= blackhole_unlock_cost:
+                            money -= blackhole_unlock_cost
+                            blackhole_page_unlocked = True
+                        else:
+                            # not enough money; ignore
+                            pass
                     elif k in '12345':
                         # First check if this key is a technology key
                         is_tech_key = False
@@ -1452,7 +1814,9 @@ def main():
             if world == 1 and page == 0:
                 timea += 0.1
                 if timea >= 1:
-                    money += rate * adminmultiplier * othermultiplier
+                    money += (
+                        rate * adminmultiplier * othermultiplier * ships_money_multiplier()
+                    )
                     timea = 0.0
 
                 print(f"Money: {money:.2f}\n")
@@ -1466,13 +1830,62 @@ def main():
                     if upg["seen"]:
                         any_seen = True
                         status = f"+{upg['rate_inc']}/sec | Cost: ${upg['cost']}" if upg["count"] < upg["max"] else "MAXED"
-                        print(f"[{upg['key'].upper()}] {upg['name']} ({upg['count']}/{upg['max']}) {status}")
+                        if upg['max'] == 1:
+                            cnt_str = f"({upg['count']})"
+                        else:
+                            cnt_str = f"({upg['count']}/{upg['max']})"
+                        print(f"[{upg['key'].upper()}] {upg['name']} {cnt_str} {status}")
                 if not any_seen: print("(No upgrades available yet...)")
                 if research_page_unlocked: print("\nPress [R] to go to Research.")
                 if technology_page_unlocked: print("Press [T] to go to Technology.")
+                # Black hole page access
+                print("Press [B] to open the Black Hole page.")
+                print("Press [M] to Admin-Unlock Black Hole (debug)")
                 sanity = 20 - w1upgrades
                 bar = int((sanity / 20) * length)
                 print("\n[" + "#" * bar + " " * (length - bar) + "]\n")
+
+            # --- WORLD 1: BLACK HOLE PAGE ---
+            if world == 1 and page == 3:
+                # income and auto effects
+                timea += 0.1
+                if timea >= 1:
+                    money += (
+                        rate * adminmultiplier * othermultiplier * ships_money_multiplier()
+                    )
+                    timea = 0.0
+
+                # render black hole (animated curses view)
+                disable_mouse()
+                try:
+                    curses.wrapper(curses_blackhole_view)
+                except Exception:
+                    # fallback to static render if curses fails
+                    print(f"Money: {money:.2f}\n")
+                    draw_blackhole_page()
+                    time.sleep(0.5)
+                flush_stdin()
+                enable_mouse()
+                # return to city after viewing
+                page = 0
+                print("\nPress [R] to return to City.")
+
+                if key:
+                    k = key.lower()
+                    if k == 'r':
+                        page = 0
+                    elif k == 'k':
+                        world = 2
+                    elif k == 'q':
+                        break
+                    else:
+                        for upg in blackhole_upgrades:
+                            if k == upg["key"]:
+                                buy_blackhole_upgrade(upg)
+                                break
+
+                time.sleep(0.1)
+                continue
 
             # --- WORLD 2 MAP VIEW (curses) ---
             if world == 2:
@@ -1581,10 +1994,20 @@ def main():
                     elif k == 'u':
                         perform_player_action('ability')
                 elif world == 1 and page == 0:
-                    for upg in upgrades:
-                        if k == upg["key"]: 
-                            buy_upgrade(upg)
-                            break
+                    if k == 'b':
+                        if blackhole_page_unlocked:
+                            page = 3
+                        else:
+                            # not unlocked yet
+                            pass
+                    elif k == 'm':
+                        # admin unlock (debug)
+                        blackhole_page_unlocked = True
+                    else:
+                        for upg in upgrades:
+                            if k == upg["key"]:
+                                buy_upgrade(upg)
+                                break
                 elif world == 1 and page == 1:
                     for r in research:
                         if k == r["key"]: 
@@ -1609,6 +2032,12 @@ def main():
     finally:
             disable_mouse()
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            # ensure terminal attributes are reset (clear any reverse/inverse modes)
+            try:
+                sys.stdout.write("\033[0m")
+                sys.stdout.flush()
+            except Exception:
+                pass
             clear()
             print("Exited cleanly.")
 
