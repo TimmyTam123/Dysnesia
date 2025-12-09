@@ -647,11 +647,26 @@ click_labels = {
 # assign one monster name per region (so each region has a set name)
 # Use sequential identifiers so you can edit them manually: enemy_a, enemy_b, ...
 region_enemy_map = {}
+# Explicit per-region names for important regions (editable)
+custom_names = {
+    'whispering_pines': 'Shrouded Wanderer',
+    'silent_graveyard': 'Fading Crawler',
+    'hollowed_farmlands': 'Bent Wraith',
+    'sunken_marketplace': 'Drifting Mannequin',
+    'old_residential_district': 'Hallway Watcher',
+    'mirror_marsh': 'Refracted Shade',
+    # forgotten_sanctum will display a dynamic error-like name (None means dynamic)
+    'forgotten_sanctum': None,
+    'obsidian_quarry': 'Crystalline Husk',
+}
 for i, lbl in enumerate(click_labels.keys()):
     norm = lbl.lower().replace(" ", "_")
-    # generate a letter sequence (a, b, c, ...). Wrap after 'z' back to 'a'.
-    letter = chr(ord('a') + (i % 26))
-    region_enemy_map[norm] = f"enemy_{letter}"
+    if norm in custom_names:
+        region_enemy_map[norm] = custom_names[norm]
+    else:
+        # generate a letter sequence (a, b, c, ...). Wrap after 'z' back to 'a'.
+        letter = chr(ord('a') + (i % 26))
+        region_enemy_map[norm] = f"enemy_{letter}"
 
 # track which regions have been defeated (so each enemy can only be killed once)
 defeated_regions = set()
@@ -861,35 +876,67 @@ research = [
 
 # --- ORE TYPES BY DEPTH ---
 ore_types = {
-    1: [  # Depth 1
+    1: [
         {"name": "stone", "color": "░", "hp": 50, "value": 1, "weight": 50},
         {"name": "coal", "color": "▓", "hp": 75, "value": 3, "weight": 30},
         {"name": "copper", "color": "▒", "hp": 100, "value": 5, "weight": 20},
     ],
-    2: [  # Depth 2
+    2: [
         {"name": "coal", "color": "▓", "hp": 75, "value": 3, "weight": 30},
         {"name": "copper", "color": "▒", "hp": 100, "value": 5, "weight": 25},
         {"name": "iron", "color": "▓", "hp": 150, "value": 10, "weight": 25},
         {"name": "silver", "color": "░", "hp": 200, "value": 20, "weight": 20},
     ],
-    3: [  # Depth 3
+    3: [
         {"name": "iron", "color": "▓", "hp": 150, "value": 10, "weight": 30},
         {"name": "silver", "color": "░", "hp": 200, "value": 20, "weight": 25},
         {"name": "gold", "color": "█", "hp": 300, "value": 50, "weight": 25},
         {"name": "emerald", "color": "◆", "hp": 400, "value": 100, "weight": 20},
     ],
-    4: [  # Depth 4
+    4: [
         {"name": "gold", "color": "█", "hp": 300, "value": 50, "weight": 30},
         {"name": "emerald", "color": "◆", "hp": 400, "value": 100, "weight": 25},
         {"name": "ruby", "color": "♦", "hp": 500, "value": 200, "weight": 25},
         {"name": "diamond", "color": "◊", "hp": 750, "value": 500, "weight": 20},
     ],
-    5: [  # Depth 5
+    5: [
         {"name": "diamond", "color": "◊", "hp": 750, "value": 500, "weight": 35},
         {"name": "mythril", "color": "▲", "hp": 1000, "value": 1000, "weight": 30},
         {"name": "adamantite", "color": "■", "hp": 1500, "value": 2000, "weight": 20},
         {"name": "orichalcum", "color": "★", "hp": 2500, "value": 5000, "weight": 15},
     ],
+}
+
+ENEMY_ASCII = {
+    'whispering_pines': (
+        ["   .--.", "  /../ ", " (  : )", "  | ||", "   --- "],
+        ["  .--.  ", " (    ) ", "  ( : )>", "   --- ", "  /___ "]
+    ),
+    'silent_graveyard': (
+        ["   .-.", "  (   )", " ( : ) ", "  /|/", "  /  "],
+        ["  ._.", " (o o)", "  -_- ", "  /|/", "  /  "]
+    ),
+    'hollowed_farmlands': (
+        ["   /  ", "  /   ", " (    )", "  |  |", "  /__ "],
+        ["   ~~  ", " (.. )", "  ( : )>", "  /  ", "  /___ "]
+    ),
+    'sunken_marketplace': (
+        ["  [====]", "  |::..|", "  |:.. |", "   /   ", "  /____"],
+        ["  _____ ", " (_____)", "  ( : )>", "  /   ", "  /___ "]
+    ),
+    'old_residential_district': (
+        ["  |--|", " [____]", "  (..)", "  /|/", "  /__ "],
+        ["  /_/_ ", " ( o.o )", "  ( : ) ", "  /   ", "  /___ "]
+    ),
+    'mirror_marsh': (
+        ["   ~~~", "  ~o~ ", " (  : )", "  /   ", " /____"],
+        ["  ~~~  ", " ~o~   ", "  ( : )>", "  /   ", " /____" ]
+    ),
+    'forgotten_sanctum': (
+        # normal human ASCII art for the Forgotten Sanctum enemy
+        ["   O", "  /|/", "  /  ", "", ""],
+        ["   O", "  /|/", "  /  ", "", ""]
+    ),
 }
 
 def spawn_new_ore():
@@ -1444,6 +1491,97 @@ def format_bar(value, maximum, width=20):
     filled = int(pct * width)
     return "[" + "#" * filled + " " * (width - filled) + "]"
 
+
+# --- ENEMY DISPLAY HELPERS ---
+def random_error_name(length=8):
+    """Return a short garbled string made of punctuation to simulate corruption."""
+    chars = list('%&*^#@$!<>?/~')
+    return ''.join(random.choice(chars) for _ in range(length))
+
+
+def get_enemy_display_name(region_key):
+    """Return the display name for a given region. If the region's name is None
+    (special case for Forgotten Sanctum), return a randomized garbled string.
+    Otherwise return the configured name.
+    """
+    try:
+        if region_key is None:
+            return random_error_name()
+        if region_key == 'forgotten_sanctum':
+            return random_error_name()
+        name = region_enemy_map.get(region_key)
+        if not name:
+            return region_key.replace('_', ' ').title()
+        return name
+    except Exception:
+        return random_error_name()
+
+
+# ASCII art per-region (left, right)
+ENEMY_ASCII = {
+    'whispering_pines': (
+        ["   .--.", "  /../ ", " (  : )", "  | ||", "   --- "],
+        ["  .--.  ", " (    ) ", "  ( : )>", "   --- ", "  /___ "]
+    ),
+    'silent_graveyard': (
+        ["   .-.", "  (   )", " ( : ) ", "  /|/", "  /  "],
+        ["  ._.", " (o o)", "  -_- ", "  /|/", "  /  "]
+    ),
+    'hollowed_farmlands': (
+        ["   /  ", "  /   ", " (    )", "  |  |", "  /__ "],
+        ["   ~~  ", " (.. )", "  ( : )>", "  /  ", "  /___ "]
+    ),
+    'sunken_marketplace': (
+        ["  [====]", "  |::..|", "  |:.. |", "   /   ", "  /____"],
+        ["  _____ ", " (_____)", "  ( : )>", "  /   ", "  /___ "]
+    ),
+    'old_residential_district': (
+        ["  |--|", " [____]", "  (..)", "  /|/", "  /__ "],
+        ["  /_/_ ", " ( o.o )", "  ( : ) ", "  /   ", "  /___ "]
+    ),
+    'mirror_marsh': (
+        ["   ~~~", "  ~o~ ", " (  : )", "  /   ", " /____"],
+        ["  ~~~  ", " ~o~   ", "  ( : )>", "  /   ", " /____" ]
+    ),
+    'forgotten_sanctum': (
+        # normal human ASCII art for the Forgotten Sanctum enemy
+        ["   O", "  /|/", "  /  ", "", ""],
+        ["   O", "  /|/", "  /  ", "", ""]
+    ),
+}
+
+# Player ASCII (left side) — stays consistent across all combats
+PLAYER_ASCII = [
+    "  (\\_/)",
+    "  (•_•)",
+    " <( : ) ",
+    "  /   \\",
+    "  /___\\",
+]
+
+
+def get_ascii_for_region(region_key):
+    """Return (left, right) ascii lists for a region. Falls back to default pair."""
+    if not region_key:
+        # default simple art (avoid backslashes to ensure portability)
+        return (
+            ["  (o_o)", "  (•_•)", " <( : ) ", "   -  ", "  /___ "],
+            ["  (._.)", " ( o.o )", "  ( : )> ", "   -  ", "  /___ "]
+        )
+    art = ENEMY_ASCII.get(region_key)
+    if art:
+        return art
+    # try approximate match by prefix
+    for k in ENEMY_ASCII:
+        if k in region_key:
+            return ENEMY_ASCII[k]
+    # default
+    # fallback default
+    return (
+        ["  (o_o)", "  (•_•)", " <( : ) ", "   -  ", "  /___ "],
+        ["  (._.)", " ( o.o )", "  ( : )> ", "   -  ", "  /___ "]
+    )
+
 def enter_combat(location_name=None):
     global combat_started, player_hp, player_max_hp, enemy_hp, enemy_max_hp, player_heals, player_ability_charges, combat_log, current_enemy_name, current_enemy_region
     # determine the region key (normalize)
@@ -1478,33 +1616,27 @@ def enter_combat(location_name=None):
     enemy_hp = enemy_max_hp
     player_heals = 3
     player_ability_charges = 1
+    # store canonical name (may be None for dynamically-named regions)
     current_enemy_name = enemy_name
-    combat_log = [f"'{current_enemy_name}' has appeared at {location_name or 'Unknown Location'}!"]
+    # display name may be dynamic (e.g., forgotten_sanctum)
+    display_name = get_enemy_display_name(region_key)
+    combat_log = [f"'{display_name}' has appeared at {location_name or 'Unknown Location'}!"]
 
 def draw_combat_ui():
-    # simple ascii characters
-    left = [
-        "  (\\_/)",
-        "  (•_•)",
-        " <( : ) ",
-        "  /   \\",
-        "  /___\\"
-    ]
-    right = [
-        "  /\\_/\\",
-        " ( o.o )",
-        "  ( : )> ",
-        "  /   \\",
-        "  /___\\"
-    ]
+    # choose ascii art based on current region (if available)
+    left, right = get_ascii_for_region(current_enemy_region)
     width = 80
     # header
-    print("=== DUNGEON - COMBAT ===\n")
-    # draw ascii side-by-side
+    display_name = get_enemy_display_name(current_enemy_region)
+    print("=== ENEMY - COMBAT ===\n")
+    print(f"Enemy: {display_name}\n")
+    # draw ascii side-by-side: left is player art, right is enemy art
+    _, enemy_right = get_ascii_for_region(current_enemy_region)
+    left = PLAYER_ASCII
     gap = width - 20
-    for i in range(max(len(left), len(right))):
+    for i in range(max(len(left), len(enemy_right))):
         l = left[i] if i < len(left) else ""
-        r = right[i] if i < len(right) else ""
+        r = enemy_right[i] if i < len(enemy_right) else ""
         print(l.ljust(20) + " " * 10 + r.rjust(20))
 
     # hp bars
@@ -1552,8 +1684,17 @@ def perform_player_action(action):
         try:
             if current_enemy_region and current_enemy_region not in defeated_regions:
                 defeated_regions.add(current_enemy_region)
-                if current_enemy_name and current_enemy_name not in killed_monsters:
-                    killed_monsters.insert(0, current_enemy_name)
+                # Use display name for recording (handles dynamic names like Forgotten Sanctum)
+                try:
+                    canonical = region_enemy_map.get(current_enemy_region)
+                except Exception:
+                    canonical = None
+                if canonical is None:
+                    display_name = get_enemy_display_name(current_enemy_region)
+                else:
+                    display_name = current_enemy_name or canonical
+                if display_name and display_name not in killed_monsters:
+                    killed_monsters.insert(0, display_name)
         except Exception:
             pass
         combat_started = False
@@ -1858,12 +1999,14 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 
         # build per-line buffer for this frame
         new_lines = [''] * maxy
-        title = f"DUNGEON: {region.replace('_',' ').title()}   Level: {player_level}"
+        # title uses the display name (may be dynamic for some regions)
+        display_name = get_enemy_display_name(region)
+        title = f"Enemy: {display_name}   Level: {player_level}"
         new_lines[0] = title[:maxx-1]
 
-        # ascii art left/right
-        left = ["  (\\_/)", "  (•_•)", " <( : ) ", "  /   \\", "  /___\\\\"]
-        right = ["  /\\_/\\"," ( o.o )","  ( : )> ", "  /   \\", "  /___\\\\"]
+        # left side is player's consistent ASCII; right is enemy art for this region
+        left = PLAYER_ASCII
+        _, right = get_ascii_for_region(region)
         for i in range(5):
             y = 2 + i
             if y >= maxy:
