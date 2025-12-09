@@ -1892,6 +1892,8 @@ def main():
                         world = 1
                     elif world == 3:
                         world = 1
+                    elif world == 4:
+                        world = 2
                 elif k == 'r' and research_page_unlocked and world == 1: 
                     page = 1
                 elif k == 't' and technology_page_unlocked and world == 1: 
