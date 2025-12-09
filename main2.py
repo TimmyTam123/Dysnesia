@@ -293,7 +293,8 @@ def research_view():
                     world = 1
                 return
             elif k == 'q':
-                sys.exit(0)
+                # ignore 'q' — do not quit the game
+                pass
             elif k == 'r' and research_page_unlocked:
                 page = 0
                 return
@@ -339,7 +340,8 @@ def kill_list_view():
                 world = 2
                 return
             elif k == 'q':
-                sys.exit(0)
+                # ignore 'q' — do not quit
+                pass
 
         # Re-render if the kill list changed while viewing
         if killed_monsters != last_snapshot:
@@ -401,7 +403,8 @@ def home_view():
                 world = 2
                 return
             elif k == 'q':
-                sys.exit(0)
+                # ignore 'q' — do not quit
+                pass
             elif k == 'r' and research_page_unlocked:
                 page = 1
                 return
@@ -487,7 +490,8 @@ def mining_view():
                 world = 2
                 return
             elif k == 'q':
-                sys.exit(0)
+                # ignore 'q' — do not quit
+                pass
             elif k == 'r':
                 page = 0
                 return
@@ -542,6 +546,90 @@ def ships_money_multiplier():
 # research rendering state
 last_money_for_research = None
 research_needs_update = True
+
+# --- SANITY / PROGRESSION STATE ---
+# Sanity accumulates from upgrades on a rotating active page. When full,
+# the player is sent to world 2. After returning, the active page rotates.
+sanity_points = 0
+# larger sanity scale (player sees a ~0-200 bar instead of tiny 0-5)
+SANITY_TARGET = 200
+# stages: 0=city upgrades,1=research,2=mining,3=blackhole final
+sanity_stage = 0
+# per-stage increments (how many points a normal purchase gives when that
+# page is the active sanity contributor)
+SANITY_INCREMENTS = {
+    'city': 4,
+    'research': 12,
+    'technology': 8,
+    'blackhole': 20,
+}
+# one-off event amounts (milestones)
+SANITY_EVENT_AMOUNTS = {
+    'mine_half': 25,
+    'bh_unlock': 40,
+    'bh_finish': 80,
+}
+SANITY_WEIGHTS = [1, 1, 2, 1]
+# when true we have sent player to world2 and await their return to rotate stage
+awaiting_cycle_return = False
+cycle_return_applied = False
+
+# one-time sanity event awards to align progression milestones
+sanity_awarded = {
+    'research_unlock': False,
+    'tech_unlock': False,
+    'mine_half': False,
+    'bh_unlock': False,
+    'bh_finish': False,
+}
+
+
+def award_sanity_event(ev_key):
+    """Award one sanity point for a named event once.
+
+    Events: 'research_unlock','tech_unlock','mine_half','bh_unlock','bh_finish'
+    """
+    global sanity_awarded
+    if sanity_awarded.get(ev_key):
+        return
+    sanity_awarded[ev_key] = True
+    try:
+        # award different amounts for milestone events when defined
+        amt = SANITY_EVENT_AMOUNTS.get(ev_key, 1) if 'SANITY_EVENT_AMOUNTS' in globals() else 1
+        add_sanity(amt)
+    except Exception:
+        try:
+            global sanity_points
+            sanity_points += SANITY_EVENT_AMOUNTS.get(ev_key, 1) if 'SANITY_EVENT_AMOUNTS' in globals() else 1
+        except Exception:
+            pass
+
+
+def add_sanity(amount=1):
+    """Add sanity points and trigger world2 transition if full."""
+    global sanity_points, SANITY_TARGET
+    try:
+        sanity_points += int(amount)
+    except Exception:
+        try:
+            sanity_points += int(float(amount))
+        except Exception:
+            sanity_points += 1
+    # cap at SANITY_TARGET, but do NOT auto-send to world2 here.
+    # The player should be sent to World 2 only when explicitly unlocking Research.
+    if sanity_points >= SANITY_TARGET:
+        sanity_points = SANITY_TARGET
+
+
+def trigger_send_to_world2():
+    """Send the player to world 2 and mark that we await their return."""
+    global world, awaiting_cycle_return, cycle_return_applied
+    try:
+        world = 2
+    except Exception:
+        pass
+    awaiting_cycle_return = True
+    cycle_return_applied = False
 
 # --- MINING STATE ---
 current_ore = None
@@ -1263,6 +1351,30 @@ def buy_blackhole_upgrade(upg):
     elif upg["key"] == "n":
         # Breaking the reality unlocks research (keeps original effect)
         research_page_unlocked = True
+    # per-stage sanity: blackhole upgrades increase sanity when blackhole is active
+    try:
+        if sanity_stage == 3:
+            add_sanity(SANITY_INCREMENTS.get('blackhole', 1))
+    except Exception:
+        pass
+
+    # award final-blackhole completion event when the special upgrade purchased
+    try:
+        if upg.get('key') == 'n':
+            try:
+                award_sanity_event('bh_finish')
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        if upg.get('key') == 'n':
+            try:
+                trigger_send_to_world2()
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # increase cost for next purchase when multiplier >0
     if upg.get("multiplier", 0) and upg["multiplier"] > 0:
@@ -1303,9 +1415,24 @@ def get_key():
     # unified wrapper that uses the cross-platform `get_char` implementation
     return get_char()
 
+
+def render_sanity_bar_console():
+    """Print the sanity bar for console pages."""
+    try:
+        global sanity_points, SANITY_TARGET
+        filled = int(sanity_points)
+        total = int(SANITY_TARGET)
+        bar_width = 30
+        filled_w = int((filled / total) * bar_width) if total > 0 else 0
+        bar = "[" + "#" * filled_w + " " * (bar_width - filled_w) + "]"
+        # show only the bar to the player; numeric fractions are hidden
+        print(f"Sanity: {bar}\n")
+    except Exception:
+        pass
+
 # --- BUY FUNCTIONS ---
 def buy_upgrade(upg):
-    global money, rate, w1upgrades, research_page_unlocked
+    global money, rate, w1upgrades, research_page_unlocked, sanity_points, SANITY_TARGET
     if upg["count"] >= upg["max"]: return
     if money < upg["cost"]: return
     money -= upg["cost"]
@@ -1313,7 +1440,29 @@ def buy_upgrade(upg):
     upg["count"] += 1
     w1upgrades += 1
     if upg["name"] == "Unlock Research":
+        # Unlocking research: fill bar and send player explicitly
         research_page_unlocked = True
+        try:
+            sanity_points = int(SANITY_TARGET)
+        except Exception:
+            try:
+                sanity_points = int(float(SANITY_TARGET))
+            except Exception:
+                sanity_points = SANITY_TARGET
+        try:
+            trigger_send_to_world2()
+        except Exception:
+            pass
+    else:
+        # Normal upgrades increase sanity only if City is the active sanity stage
+        try:
+            if sanity_stage == 0:
+                add_sanity(SANITY_INCREMENTS.get('city', 1))
+        except Exception:
+                try:
+                    sanity_points += SANITY_INCREMENTS.get('city', 1)
+                except Exception:
+                    pass
     # mark research page to update when viewing
     try:
         global research_needs_update
@@ -1322,9 +1471,10 @@ def buy_upgrade(upg):
         pass
     if upg["count"] < upg["max"]:
         upg["cost"] = int(upg["cost"] * upg["multiplier"])
+    # (other milestone sanity awards handled elsewhere)
 
 def buy_research(res):
-    global money, adminmultiplier, othermultiplier
+    global money, adminmultiplier, othermultiplier, page
     if res["purchased"]: return
     if money < res["cost"]: return
     money -= res["cost"]
@@ -1334,6 +1484,31 @@ def buy_research(res):
     try:
         global research_needs_update
         research_needs_update = True
+    except Exception:
+        pass
+    # per-stage sanity: research purchases increase sanity when research is active
+    try:
+        if sanity_stage == 1:
+            add_sanity(SANITY_INCREMENTS.get('research', 1))
+    except Exception:
+        pass
+    # if this research unlocks Technology, also award the one-time event
+    try:
+        if res.get('key') == '0' or res.get('name', '').lower().startswith('unlock technology'):
+            try:
+                award_sanity_event('tech_unlock')
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # If this research unlocked the Technology page, move the player there
+    try:
+        if res.get('key') == '0' or res.get('name', '').lower().startswith('unlock technology'):
+            try:
+                # send player to world 2 when Technology is unlocked
+                trigger_send_to_world2()
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -1359,6 +1534,21 @@ def buy_technology(tech):
 
     tech["purchased"] = True
     exec(tech["effect"], globals())
+    # If this tech unlocked a deep depth (>=4), send player to world 2
+    try:
+        if tech.get('depth_unlock', 0) >= 4:
+            try:
+                trigger_send_to_world2()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # per-stage sanity: technology/mining purchases increase sanity when mining is active
+    try:
+        if sanity_stage == 2:
+            add_sanity(SANITY_INCREMENTS.get('technology', 1))
+    except Exception:
+        pass
 
 
 
@@ -2233,6 +2423,22 @@ def curses_blackhole_view(stdscr):
                     safe_addstr(stdscr, ry, col, f"[{upg['key'].upper()}] {upg['name']}")
                     safe_addstr(stdscr, ry + 1, col, f"   {upg['desc']} - {status}")
                     ry += 2
+            # draw sanity bar at bottom centered
+            try:
+                bar_len = min(40, max(10, maxx - 8))
+                filled_w = 0
+                try:
+                    if SANITY_TARGET > 0:
+                        filled_w = int((sanity_points / float(SANITY_TARGET)) * bar_len)
+                except Exception:
+                    filled_w = int(sanity_points)
+                filled_w = max(0, min(bar_len, filled_w))
+                bar = "[" + "#" * filled_w + " " * (bar_len - filled_w) + "]"
+                bar_full = f"SANITY: {bar}"
+                bx = max(2, (maxx - len(bar_full)) // 2)
+                safe_addstr(stdscr, maxy - 2, bx, bar_full)
+            except Exception:
+                pass
             safe_addstr(stdscr, maxy - 3, col, "[K] Back   [Q] Quit")
         except Exception:
             pass
@@ -2288,6 +2494,34 @@ def main():
         while True:
             key = get_key()
             clear()
+            # global quit: pressing 'q' anywhere should quit the main loop
+            try:
+                if key and key.lower() == 'q':
+                    break
+            except Exception:
+                pass
+
+            # If we returned from world 2 after being sent there by sanity, rotate the active sanity stage
+            try:
+                global awaiting_cycle_return, cycle_return_applied, sanity_stage, SANITY_WEIGHTS, sanity_points
+                if awaiting_cycle_return and world == 1 and not cycle_return_applied:
+                    sanity_stage = (sanity_stage + 1) % len(SANITY_WEIGHTS)
+                    cycle_return_applied = True
+                    awaiting_cycle_return = False
+                    sanity_points = 0
+                    print("You feel your focus shift... new challenges matter more now.")
+                    time.sleep(1.0)
+                    # reset per-cycle one-time sanity event flags so milestones
+                    # can be awarded again on the next cycle
+                    try:
+                        for k in list(sanity_awarded.keys()):
+                            sanity_awarded[k] = False
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # (Sanity bar will be rendered at the bottom of each page)
 
             # --- WORLD 1 RESEARCH PAGE ---
             if world == 1 and page == 1:
@@ -2306,6 +2540,11 @@ def main():
                         st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
                         print(f"[{res['key']}] {res['name']} {st}")
                 if research_page_unlocked: print("\nPress [R] to switch pages.")
+                # render sanity bar at bottom of this page
+                try:
+                    render_sanity_bar_console()
+                except Exception:
+                    pass
                 if key:
                     k = key.lower()
                     if k == 'k':
@@ -2315,11 +2554,15 @@ def main():
                             world = 1
                         elif world == 3:
                             world = 1
-                    elif k == 'q': break
+                    elif k == 'q':
+                        # ignore 'q' in main loop input handling
+                        pass
                     elif k == 'r' and research_page_unlocked: page = 0
                     else:
                         for r in research:
-                            if k == r["key"]: buy_research(r); break
+                            if k == r["key"]:
+                                buy_research(r)
+                                break
                 time.sleep(0.1)
                 continue
             if world == 1 and page == 2:
@@ -2499,14 +2742,21 @@ def main():
                         
                         print(f"{left_line}  {right_line}")
 
+                # render sanity bar at bottom of this page
+                try:
+                    render_sanity_bar_console()
+                except Exception:
+                    pass
+
                 if key:
                     k = key.lower()
                     if k == ' ':
                         mine_ore()
                     elif k == 'k':
                         world = 2
-                    elif k == 'q': 
-                        break
+                    elif k == 'q':
+                        # ignore 'q' — do not quit
+                        pass
                     elif k == 'r': 
                         page = 0
                     elif k == 'u' and max_depth >= 5 and not blackhole_page_unlocked:
@@ -2514,6 +2764,15 @@ def main():
                         if money >= blackhole_unlock_cost:
                             money -= blackhole_unlock_cost
                             blackhole_page_unlocked = True
+                            try:
+                                award_sanity_event('bh_unlock')
+                            except Exception:
+                                pass
+                            try:
+                                # also send player to world 2 on BH unlock
+                                trigger_send_to_world2()
+                            except Exception:
+                                pass
                         else:
                             # not enough money; ignore
                             pass
@@ -2543,6 +2802,16 @@ def main():
                             if new_depth <= max_depth:
                                 depth = new_depth
                                 spawn_new_ore()
+                                # award half-mining milestone when first reaching halfway depth
+                                try:
+                                    half_th = (max_depth + 1) // 2
+                                    if depth >= half_th:
+                                        try:
+                                            award_sanity_event('mine_half')
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
                     else:
                         # Handle other technology keys (q, w, e, r, t, y, u, i, o, p, 0)
                         for tech in technology:
@@ -2580,11 +2849,13 @@ def main():
                 if research_page_unlocked: print("\nPress [R] to go to Research.")
                 if technology_page_unlocked: print("Press [T] to go to Technology.")
                 # Black hole page access
-                print("Press [B] to open the Black Hole page.")
+                if blackhole_page_unlocked:
+                    print("Press [B] to open the Black Hole page.")
                 print("Press [M] to Admin-Unlock Black Hole (debug)")
-                sanity = 20 - w1upgrades
-                bar = int((sanity / 20) * length)
-                print("\n[" + "#" * bar + " " * (length - bar) + "]\n")
+                try:
+                    render_sanity_bar_console()
+                except Exception:
+                    pass
 
             # --- WORLD 1: BLACK HOLE PAGE ---
             if world == 1 and page == 3:
@@ -2618,7 +2889,8 @@ def main():
                     elif k == 'k':
                         world = 2
                     elif k == 'q':
-                        break
+                        # ignore 'q' — do not quit
+                        pass
                     else:
                         for upg in blackhole_upgrades:
                             if k == upg["key"]:
