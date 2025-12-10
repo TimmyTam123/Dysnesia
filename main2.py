@@ -508,6 +508,13 @@ def mining_view():
                 if new_depth <= max_depth:
                     depth = new_depth
                     spawn_new_ore()
+                    # TRIGGER: When reaching depth 4, award sanity and send to World 2
+                    if depth == 4:
+                        try:
+                            award_sanity_event('depth_4_reach')
+                            trigger_send_to_world2()
+                        except Exception:
+                            pass
                     need_render = True
             else:
                 for tech in technology:
@@ -538,6 +545,8 @@ player_level = 1
 # --- BLACK HOLE / WORLD1 ALTERNATE PAGE ---
 # Locked by default; unlocked by completing mining end or admin button
 blackhole_page_unlocked = False
+blackhole_page_first_visit = False  # Track first BH page visit for sanity award
+admin_ore_granted_msg = ""  # Message to display when admin button is pressed
 blackhole_growth = 0
 blackhole_upgrades_count = 0
 ships_count = 0
@@ -932,6 +941,7 @@ ore_inventory = {
     "mythril": 0,
     "adamantite": 0,
     "orichalcum": 0,
+    "orichalcum_shard": 0,  # Depth 5 only; required to unlock Black Hole
 }
 
 
@@ -996,10 +1006,11 @@ ore_types = {
         {"name": "diamond", "color": "◊", "hp": 750, "value": 500, "weight": 20},
     ],
     5: [
-        {"name": "diamond", "color": "◊", "hp": 750, "value": 500, "weight": 35},
-        {"name": "mythril", "color": "▲", "hp": 1000, "value": 1000, "weight": 30},
+        {"name": "diamond", "color": "◊", "hp": 750, "value": 500, "weight": 30},
+        {"name": "mythril", "color": "▲", "hp": 1000, "value": 1000, "weight": 25},
         {"name": "adamantite", "color": "■", "hp": 1500, "value": 2000, "weight": 20},
         {"name": "orichalcum", "color": "★", "hp": 2500, "value": 5000, "weight": 15},
+        {"name": "orichalcum_shard", "color": "✶", "hp": 3000, "value": 7500, "weight": 10},
     ],
 }
 
@@ -2477,7 +2488,7 @@ def curses_blackhole_view(stdscr):
         time.sleep(0.08)
 
 def main():
-    global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked, blackhole_page_unlocked, blackhole_growth, ships_count, blackhole_unlock_cost
+    global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked, blackhole_page_unlocked, blackhole_growth, ships_count, blackhole_unlock_cost, admin_ore_granted_msg
     generate_city_layout()
     spawn_new_ore()  # Add this line
     # Configure terminal modes on POSIX only; Windows doesn't have termios/tty
@@ -2502,6 +2513,12 @@ def main():
         while True:
             key = get_key()
             clear()
+            
+            # Display admin message if set
+            if admin_ore_granted_msg:
+                print(f"\n{admin_ore_granted_msg}\n")
+                admin_ore_granted_msg = ""
+            
             # global quit: pressing 'q' anywhere used to quit the main loop
             # User requested 'q' to do nothing special; ignore here.
             try:
@@ -2770,8 +2787,11 @@ def main():
                         page = 0
                     elif k == 'u' and max_depth >= 5 and not blackhole_page_unlocked:
                         # Unlock black hole from mining end
-                        if money >= blackhole_unlock_cost:
+                        # Requires: 1 orichalcum_shard (depth 5 only ore) + money cost
+                        shard_count = ore_inventory.get('orichalcum_shard', 0)
+                        if shard_count >= 1 and money >= blackhole_unlock_cost:
                             money -= blackhole_unlock_cost
+                            ore_inventory['orichalcum_shard'] -= 1
                             blackhole_page_unlocked = True
                             try:
                                 award_sanity_event('bh_unlock')
@@ -2783,7 +2803,7 @@ def main():
                             except Exception:
                                 pass
                         else:
-                            # not enough money; ignore
+                            # not enough ore or money; ignore
                             pass
                     elif k in '12345':
                         # First check if this key is a technology key
@@ -2860,6 +2880,10 @@ def main():
                 # Black hole page access
                 if blackhole_page_unlocked:
                     print("Press [B] to open the Black Hole page.")
+                # Show orichalcum_shard inventory if available
+                if max_depth >= 5:
+                    shards = ore_inventory.get('orichalcum_shard', 0)
+                    print(f"\n✶ Orichalcum Shards: {shards} (needed to unlock BH)")
                 print("Press [M] to Admin-Unlock Black Hole (debug)")
                 try:
                     render_sanity_bar_console()
@@ -2868,11 +2892,21 @@ def main():
 
             # --- WORLD 1: BLACK HOLE PAGE ---
             if world == 1 and page == 3:
+                # FIRST BH PAGE VISIT: Award sanity if first time entering
+                try:
+                    global blackhole_page_first_visit
+                    if not blackhole_page_first_visit:
+                        award_sanity_event('bh_first_visit')
+                        blackhole_page_first_visit = True
+                except Exception:
+                    pass
+                
                 # income and auto effects
                 timea += 0.1
                 if timea >= 1:
                     money += (
-                        rate * adminmultiplier * othermultiplier * ships_money_multiplier()
+                        rate * adminmultiplier * othermultiplier *
+                        ships_money_multiplier()
                     )
                     timea = 0.0
 
@@ -3042,10 +3076,11 @@ def main():
                             depth = new_depth
                             spawn_new_ore()
                     elif k == 'z':
-                        # ADMIN BUTTON (debug): give 50 of each ore when pressed in Mining
+                        # ADMIN BUTTON: give 50 of each ore when pressed in Mining
                         try:
                             for ore_name in ore_inventory:
                                 ore_inventory[ore_name] += 50
+                            admin_ore_granted_msg = "[ADMIN] +50 ore granted!"
                         except Exception:
                             pass
                     else:
