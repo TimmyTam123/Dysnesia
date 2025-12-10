@@ -772,7 +772,7 @@ map_art = [
 "                                         ▓           ▓",
 "                                          ▓▓▓▓▓▓▓▓▓▓▓",
 "                                                 ",
-"                           (To Elysea after defeating Terivon)",
+"                                                                     
 ]
 
 # clickable labels (all 8 locations + graveyard)
@@ -1905,11 +1905,11 @@ ENEMY_ASCII = {
 
 # Player ASCII (left side) — stays consistent across all combats
 PLAYER_ASCII = [
-    "  (\\_/)",
-    "  (•_•)",
-    " <( : ) ",
-    "  /   \\",
-    "  /___\\",
+    " (\\_",
+    "  ( •_•)",
+    "  /︶\\╰─*>",
+    "",
+    "",
 ]
 
 
