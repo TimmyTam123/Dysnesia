@@ -492,6 +492,14 @@ def mining_view():
             elif k == 'q':
                 # ignore 'q' — do not quit
                 pass
+            elif k == 'z':
+                # ADMIN BUTTON (debug): give 50 of each ore when pressed in Mining
+                try:
+                    for ore_name in ore_inventory:
+                        ore_inventory[ore_name] += 50
+                    need_render = True
+                except Exception:
+                    pass
             elif k == 'r':
                 page = 0
                 return
@@ -1129,45 +1137,45 @@ technology = [
      "effect": "auto_mine_damage += 30; auto_miner_count += 5", "unlocks": ["r"], "desc": "+30 auto damage"},
     
     # Tier 4 - Unlock Depth 4
-    {"key": "q", "name": "Deep Mining Shaft", "ore_costs": {"gold": 8, "emerald": 5}, "money_cost": 50000000, 
+    {"key": "w", "name": "Deep Mining Shaft", "ore_costs": {"gold": 8, "emerald": 5}, "money_cost": 50000000, 
      "damage": 0, "auto_damage": 0, "depth_unlock": 4, "purchased": False,
      "effect": "max_depth = max(max_depth, 4)", "unlocks": ["t", "y"], "desc": "Unlock Depth 4"},
     
-    {"key": "w", "name": "Laser Drill", "ore_costs": {"gold": 10, "emerald": 6}, "money_cost": 75000000, 
+    {"key": "e", "name": "Laser Drill", "ore_costs": {"gold": 10, "emerald": 6}, "money_cost": 75000000, 
      "damage": 200, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 200", "unlocks": ["u"], "desc": "+200 damage"},
     
-    {"key": "e", "name": "Mithril Pickaxe", "ore_costs": {"gold": 12, "emerald": 8}, "money_cost": 100000000, 
+    {"key": "t", "name": "Mithril Pickaxe", "ore_costs": {"gold": 12, "emerald": 8}, "money_cost": 100000000, 
      "damage": 150, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 150", "unlocks": ["u"], "desc": "+150 damage"},
     
-    {"key": "r", "name": "Mining Operation", "ore_costs": {"gold": 15, "emerald": 10}, "money_cost": 125000000, 
+    {"key": "y", "name": "Mining Operation", "ore_costs": {"gold": 15, "emerald": 10}, "money_cost": 125000000, 
      "damage": 0, "auto_damage": 50, "depth_unlock": 0, "purchased": False,
      "effect": "auto_mine_damage += 50; auto_miner_count += 10", "unlocks": ["i"], "desc": "+50 auto damage"},
     
     # Tier 5 - Unlock Depth 5
-    {"key": "t", "name": "Ancient Depths", "ore_costs": {"ruby": 10, "diamond": 8}, "money_cost": 500000000, 
+    {"key": "u", "name": "Ancient Depths", "ore_costs": {"ruby": 10, "diamond": 8}, "money_cost": 500000000, 
      "damage": 0, "auto_damage": 0, "depth_unlock": 5, "purchased": False,
      "effect": "max_depth = max(max_depth, 5)", "unlocks": ["o", "p"], "desc": "Unlock Depth 5"},
     
-    {"key": "y", "name": "Plasma Cutter", "ore_costs": {"ruby": 12, "diamond": 10}, "money_cost": 750000000, 
+    {"key": "i", "name": "Plasma Cutter", "ore_costs": {"ruby": 12, "diamond": 10}, "money_cost": 750000000, 
      "damage": 400, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 400", "unlocks": ["o"], "desc": "+400 damage"},
     
-    {"key": "u", "name": "Quantum Drill", "ore_costs": {"diamond": 15}, "money_cost": 1000000000, 
+    {"key": "o", "name": "Quantum Drill", "ore_costs": {"diamond": 15}, "money_cost": 1000000000, 
      "damage": 300, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 300", "unlocks": ["o"], "desc": "+300 damage"},
     
-    {"key": "i", "name": "Industrial Complex", "ore_costs": {"ruby": 20, "diamond": 12}, "money_cost": 2000000000, 
+    {"key": "p", "name": "Industrial Complex", "ore_costs": {"ruby": 20, "diamond": 12}, "money_cost": 2000000000, 
      "damage": 0, "auto_damage": 100, "depth_unlock": 0, "purchased": False,
      "effect": "auto_mine_damage += 100; auto_miner_count += 20", "unlocks": ["p"], "desc": "+100 auto damage"},
     
     # Final upgrades
-    {"key": "o", "name": "Nano-Excavator", "ore_costs": {"mythril": 25, "adamantite": 15}, "money_cost": 5000000000, 
+    {"key": "[", "name": "Nano-Excavator", "ore_costs": {"mythril": 25, "adamantite": 15}, "money_cost": 5000000000, 
      "damage": 1000, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "ore_damage += 1000", "unlocks": [], "desc": "+1000 damage"},
     
-    {"key": "p", "name": "Unlock Next World", "ore_costs": {"mythril": 50, "adamantite": 30, "orichalcum": 25}, "money_cost": 25000000000, 
+    {"key": "]", "name": "Unlock Next World", "ore_costs": {"mythril": 50, "adamantite": 30, "orichalcum": 25}, "money_cost": 25000000000, 
      "damage": 0, "auto_damage": 0, "depth_unlock": 0, "purchased": False,
      "effect": "print('Next world unlocked!')", "unlocks": [], "desc": "???"},
 ]
@@ -2494,10 +2502,11 @@ def main():
         while True:
             key = get_key()
             clear()
-            # global quit: pressing 'q' anywhere should quit the main loop
+            # global quit: pressing 'q' anywhere used to quit the main loop
+            # User requested 'q' to do nothing special; ignore here.
             try:
                 if key and key.lower() == 'q':
-                    break
+                    pass
             except Exception:
                 pass
 
@@ -3032,6 +3041,13 @@ def main():
                         if new_depth <= max_depth:
                             depth = new_depth
                             spawn_new_ore()
+                    elif k == 'z':
+                        # ADMIN BUTTON (debug): give 50 of each ore when pressed in Mining
+                        try:
+                            for ore_name in ore_inventory:
+                                ore_inventory[ore_name] += 50
+                        except Exception:
+                            pass
                     else:
                         for tech in technology:
                             if k == tech["key"]: 
