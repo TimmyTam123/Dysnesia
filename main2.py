@@ -28,6 +28,9 @@ except Exception:
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
+# Debug: temporarily log raw keys to help diagnose missing admin key presses
+DEBUG_KEYLOG = True
+
 # --- CROSS-PLATFORM get_char ---
 USING_WINDOWS = sys.platform == "win32"
 if USING_WINDOWS:
@@ -37,7 +40,14 @@ if USING_WINDOWS:
         if msvcrt.kbhit():
             ch = msvcrt.getch()
             try:
-                return ch.decode()
+                out = ch.decode()
+                try:
+                    if DEBUG_KEYLOG:
+                        with open("/tmp/dysnesia_keylog.txt", "a") as f:
+                            f.write(f"{time.time()}:WIN:{repr(out)}\n")
+                except Exception:
+                    pass
+                return out
             except Exception:
                 return None
         return None
@@ -48,7 +58,17 @@ else:
     def get_char():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
         if dr:
-            return sys.stdin.read(1)
+            ch = sys.stdin.read(1)
+            try:
+                if DEBUG_KEYLOG:
+                    try:
+                        with open("/tmp/dysnesia_keylog.txt", "a") as f:
+                            f.write(f"{time.time()}:POSIX:{repr(ch)}\n")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            return ch
         return None
 
 def flush_stdin(timeout=0.01):
@@ -512,7 +532,10 @@ def mining_view():
                     if depth == 4:
                         try:
                             award_sanity_event('depth_4_reach')
-                            trigger_send_to_world2()
+                            try:
+                                trigger_send_to_world2('mining', depth)
+                            except Exception:
+                                trigger_send_to_world2('mining')
                         except Exception:
                             pass
                     need_render = True
@@ -590,7 +613,10 @@ SANITY_WEIGHTS = [1, 1, 2, 1]
 # when true we have sent player to world2 and await their return to rotate stage
 awaiting_cycle_return = False
 cycle_return_applied = False
-
+# remember what caused the send so we can pick the next active sanity stage
+last_send_cause = None
+# remember the depth at which we triggered the send (if applicable)
+last_send_depth = None
 # one-time sanity event awards to align progression milestones
 sanity_awarded = {
     'research_unlock': False,
@@ -598,6 +624,7 @@ sanity_awarded = {
     'mine_half': False,
     'bh_unlock': False,
     'bh_finish': False,
+    'post_depth3_return': False,
 }
 
 
@@ -638,15 +665,27 @@ def add_sanity(amount=1):
         sanity_points = SANITY_TARGET
 
 
-def trigger_send_to_world2():
-    """Send the player to world 2 and mark that we await their return."""
-    global world, awaiting_cycle_return, cycle_return_applied
+def trigger_send_to_world2(cause=None, depth=None):
+    """Send the player to world 2 and mark that we await their return.
+
+    Args:
+        cause (str|None): optional hint about what triggered the send
+            (e.g. 'mining', 'research', 'blackhole'). Used to pick the
+            next active sanity stage when the player returns.
+    """
+    global world, awaiting_cycle_return, cycle_return_applied, last_send_cause
     try:
         world = 2
     except Exception:
         pass
     awaiting_cycle_return = True
     cycle_return_applied = False
+    last_send_cause = cause
+    global last_send_depth
+    try:
+        last_send_depth = int(depth) if depth is not None else None
+    except Exception:
+        last_send_depth = None
 
 # --- MINING STATE ---
 current_ore = None
@@ -1370,12 +1409,19 @@ def buy_blackhole_upgrade(upg):
     elif upg["key"] == "n":
         # Breaking the reality unlocks research (keeps original effect)
         research_page_unlocked = True
-    # per-stage sanity: blackhole upgrades increase sanity when blackhole is active
+    # Award a smaller, reliable sanity bump for BH purchases so the bar
+    # progresses when the player invests in BH upgrades but doesn't jump
+    # excessively. Use about one quarter of the configured BH increment.
     try:
-        if sanity_stage == 3:
-            add_sanity(SANITY_INCREMENTS.get('blackhole', 1))
+        base = SANITY_INCREMENTS.get('blackhole', 1)
+        bump = max(1, int(base // 4))
+        add_sanity(bump)
     except Exception:
-        pass
+        try:
+            global sanity_points
+            sanity_points += 1
+        except Exception:
+            pass
 
     # award final-blackhole completion event when the special upgrade purchased
     try:
@@ -1389,7 +1435,7 @@ def buy_blackhole_upgrade(upg):
     try:
         if upg.get('key') == 'n':
             try:
-                trigger_send_to_world2()
+                trigger_send_to_world2('blackhole')
             except Exception:
                 pass
     except Exception:
@@ -1469,7 +1515,7 @@ def buy_upgrade(upg):
             except Exception:
                 sanity_points = SANITY_TARGET
         try:
-            trigger_send_to_world2()
+            trigger_send_to_world2('research')
         except Exception:
             pass
     else:
@@ -1525,7 +1571,7 @@ def buy_research(res):
         if res.get('key') == '0' or res.get('name', '').lower().startswith('unlock technology'):
             try:
                 # send player to world 2 when Technology is unlocked
-                trigger_send_to_world2()
+                trigger_send_to_world2('research')
             except Exception:
                 pass
     except Exception:
@@ -1555,11 +1601,15 @@ def buy_technology(tech):
     exec(tech["effect"], globals())
     # If this tech unlocked a deep depth (>=4), send player to world 2
     try:
-        if tech.get('depth_unlock', 0) >= 4:
+        # Only send player to world 2 when unlocking depth 4 (not depth 5)
+        if tech.get('depth_unlock', 0) == 4:
             try:
-                trigger_send_to_world2()
+                trigger_send_to_world2('mining', tech.get('depth_unlock', None))
             except Exception:
-                pass
+                try:
+                    trigger_send_to_world2('mining')
+                except Exception:
+                    pass
     except Exception:
         pass
     # per-stage sanity: technology/mining purchases increase sanity when mining is active
@@ -2483,6 +2533,14 @@ def curses_blackhole_view(stdscr):
                 if c == upg['key']:
                     buy_blackhole_upgrade(upg)
                     break
+            # If player pressed the final upgrade key while viewing the curses
+            # black hole, exit the view so the outer loop can process the
+            # world transition triggered by the purchase.
+            try:
+                if c == 'n':
+                    return
+            except Exception:
+                pass
 
         angle_offset += 6.0
         time.sleep(0.08)
@@ -2531,7 +2589,22 @@ def main():
             try:
                 global awaiting_cycle_return, cycle_return_applied, sanity_stage, SANITY_WEIGHTS, sanity_points
                 if awaiting_cycle_return and world == 1 and not cycle_return_applied:
-                    sanity_stage = (sanity_stage + 1) % len(SANITY_WEIGHTS)
+                    # If the send was caused by mining progress, make Black Hole
+                    # the next active sanity contributor so the player can pursue
+                    # unlocking it as the next major milestone.
+                    try:
+                        global last_send_cause
+                        if last_send_cause == 'mining':
+                            sanity_stage = 3
+                        else:
+                            sanity_stage = (sanity_stage + 1) % len(SANITY_WEIGHTS)
+                        # clear the remembered cause
+                        last_send_cause = None
+                    except Exception:
+                        try:
+                            sanity_stage = (sanity_stage + 1) % len(SANITY_WEIGHTS)
+                        except Exception:
+                            pass
                     cycle_return_applied = True
                     awaiting_cycle_return = False
                     sanity_points = 0
@@ -2799,7 +2872,7 @@ def main():
                                 pass
                             try:
                                 # also send player to world 2 on BH unlock
-                                trigger_send_to_world2()
+                                trigger_send_to_world2('blackhole')
                             except Exception:
                                 pass
                         else:
@@ -2880,10 +2953,7 @@ def main():
                 # Black hole page access
                 if blackhole_page_unlocked:
                     print("Press [B] to open the Black Hole page.")
-                # Show orichalcum_shard inventory if available
-                if max_depth >= 5:
-                    shards = ore_inventory.get('orichalcum_shard', 0)
-                    print(f"\n✶ Orichalcum Shards: {shards} (needed to unlock BH)")
+                # (Orichalcum shards are intentionally hidden from main page display)
                 print("Press [M] to Admin-Unlock Black Hole (debug)")
                 try:
                     render_sanity_bar_console()
@@ -3015,8 +3085,20 @@ def main():
                                     # and columns 1-32 in the left column
                                     if 6 <= y <= 14 and 1 <= x <= 32:
                                         mine_ore()  # Mine when clicking on ore visual
+                                # If we're on the Black Hole page, allow clicking to "Break The Reality"
+                                # by clicking anywhere on the right column where upgrades are shown.
+                                elif world == 1 and page == 3:
+                                    try:
+                                        # find the blackhole upgrade with key 'n' and attempt to buy it
+                                        for upg in blackhole_upgrades:
+                                            if upg.get('key') == 'n':
+                                                # attempt purchase; buy_blackhole_upgrade will handle cost and effects
+                                                buy_blackhole_upgrade(upg)
+                                                break
+                                    except Exception:
+                                        pass
                                 
-                    except Exception as e:
+                    except Exception:
                         pass  # Ignore mouse parsing errors
                 # Don't process this as keyboard input
                 key = None
@@ -3024,6 +3106,15 @@ def main():
             # Handle keyboard input
             if key and key != '\x1b':
                 k = key.lower()
+                if k == 'z':
+                    # Global admin shortcut: give 50 of each ore regardless of page
+                    try:
+                        for ore_name in ore_inventory:
+                            ore_inventory[ore_name] += 50
+                        admin_ore_granted_msg = "[ADMIN] +50 ore granted!"
+                    except Exception:
+                        pass
+                    continue
                 if k == 'q': 
                     pass
                 elif k == 'k':
@@ -3037,8 +3128,16 @@ def main():
                         world = 2
                 elif k == 'r' and research_page_unlocked and world == 1: 
                     page = 1
-                elif k == 't' and technology_page_unlocked and world == 1: 
+                elif k == 't' and technology_page_unlocked and world == 1:
                     page = 2
+                    # If we were sent to World 2 from mining at depth 3, award
+                    # a one-shot sanity bump when the player visits Technology
+                    try:
+                        if last_send_depth == 3 and not sanity_awarded.get('post_depth3_return', False):
+                            add_sanity(SANITY_INCREMENTS.get('technology', 1))
+                            sanity_awarded['post_depth3_return'] = True
+                    except Exception:
+                        pass
                 elif world == 3:
                     # combat action keys
                     if k == 'a':
@@ -3077,12 +3176,13 @@ def main():
                             spawn_new_ore()
                     elif k == 'z':
                         # ADMIN BUTTON: give 50 of each ore when pressed in Mining
+                        print("key z pressed: granting admin ore...")
                         try:
                             for ore_name in ore_inventory:
                                 ore_inventory[ore_name] += 50
                             admin_ore_granted_msg = "[ADMIN] +50 ore granted!"
                         except Exception:
-                            pass
+                            print("Failed to grant admin ore.")
                     else:
                         for tech in technology:
                             if k == tech["key"]: 
