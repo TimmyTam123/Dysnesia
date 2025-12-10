@@ -552,7 +552,7 @@ world = 1
 timea = 0.0
 money = 0
 rate = 1
-adminmultiplier = 1000000000000
+adminmultiplier = 10
 othermultiplier = 1.0
 page = 0
 research_page_unlocked = False
@@ -1022,19 +1022,19 @@ research = [
      "cost": 150000000, "purchased": False,
      "effect": "othermultiplier *= 4"},
     {"key": "6", "name": "Synthetic Bio-Alloys",
-     "cost": 1125000000, "purchased": False,
+     "cost": 500000000, "purchased": False,
      "effect": "othermultiplier *= 5"},
     {"key": "7", "name": "Interlinked Drone Swarms",
-     "cost": 20000000000, "purchased": False,
+     "cost": 2000000000, "purchased": False,
      "effect": "othermultiplier *= 10"},
     {"key": "8", "name": "Neural Cloud Integration",
-     "cost": 400000000000, "purchased": False,
+     "cost": 40000000000, "purchased": False,
      "effect": "othermultiplier *= 15"},
     {"key": "9", "name": "Cryogenic Superconductors",
-     "cost": 1200000000000, "purchased": False,
+     "cost": 120000000000, "purchased": False,
      "effect": "othermultiplier *= 20"},
     {"key": "0", "name": "Unlock Technology",
-     "cost": 10000000000000, "purchased": False,
+     "cost": 1000000000000, "purchased": False,
      "effect": "technology_page_unlocked = True"},
 ]
 
@@ -1394,12 +1394,12 @@ def generate_planet_art(size, ships):
 
 
 blackhole_upgrades = [
-    {"key": "z", "name": "Siphon Matter", "desc": "+50 rate", "base_cost": 5000000, "cost": 5000000, "multiplier": 1.35, "count": 0, "max": 20, "seen": False},
-    {"key": "x", "name": "Event Horizon", "desc": "+2 ships", "base_cost": 25000000, "cost": 25000000, "multiplier": 1.6, "count": 0, "max": 10, "seen": False},
-    {"key": "c", "name": "Singularity Core", "desc": "+50% other mult", "base_cost": 100000000, "cost": 100000000, "multiplier": 1.5, "count": 0, "max": 6, "seen": False},
-    {"key": "v", "name": "Accretion Ring", "desc": "Grow size", "base_cost": 250000000, "cost": 250000000, "multiplier": 1.35, "count": 0, "max": 8, "seen": False},
-    {"key": "s", "name": "Orbital Dockyards", "desc": "+1 ship", "base_cost": 10000000, "cost": 10000000, "multiplier": 1.5, "count": 0, "max": 50, "seen": False},
-    {"key": "n", "name": "Break The Reality", "desc": "Break the reality", "base_cost": 1000000000, "cost": 1000000000, "multiplier": 0, "count": 0, "max": 1, "seen": False},
+    {"key": "z", "name": "Siphon Matter", "desc": "+50 rate", "base_cost": 50000000000000, "cost": 50000000000000, "multiplier": 1.35, "count": 0, "max": 20, "seen": False},
+    {"key": "x", "name": "Event Horizon", "desc": "+2 ships", "base_cost": 250000000000000, "cost": 250000000000000, "multiplier": 1.6, "count": 0, "max": 10, "seen": False},
+    {"key": "c", "name": "Singularity Core", "desc": "+50% other mult", "base_cost": 100000000000000, "cost": 100000000000000, "multiplier": 1.5, "count": 0, "max": 6, "seen": False},
+    {"key": "v", "name": "Accretion Ring", "desc": "Grow size", "base_cost": 2500000000000000, "cost": 2500000000000000, "multiplier": 1.35, "count": 0, "max": 8, "seen": False},
+    {"key": "s", "name": "Orbital Dockyards", "desc": "+1 ship", "base_cost": 10000000000000000, "cost": 10000000000000000, "multiplier": 1.5, "count": 0, "max": 50, "seen": False},
+    {"key": "n", "name": "Break The Reality", "desc": "Break the reality", "base_cost": 100000000000000000, "cost": 100000000000000000, "multiplier": 0, "count": 0, "max": 1, "seen": False},
 ]
 
 
