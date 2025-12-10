@@ -909,9 +909,10 @@ def make_absolute_zones(map_lines, map_top_row):
     """
     labels = locate_labels_in_map(map_lines)
     zones = {}
-    pad_col = 2
-    pad_row_top = 0
-    pad_row_bottom = 0
+    # Expand padding so click hitboxes are generous around the visible text
+    pad_col = 6
+    pad_row_top = 1
+    pad_row_bottom = 1
     for name_key, data in labels.items():
         # data can be (row, start_char_index, first_len, second_len, display_col)
         if len(data) == 5:
@@ -1776,7 +1777,7 @@ def format_bar(value, maximum, width=20):
 
 def glitch_text(text):
     """Replace random characters in text with glitch symbols"""
-    glitch_symbols = ['#', '&', '$', '*', '@', '%', '!']
+    glitch_symbols = ['#', '&', '$', '*', '@', '%', '!', '(', ')']
     result = list(text)
     # Replace 20-40% of characters with glitches
     num_glitches = random.randint(len(text) // 5, (len(text) * 2) // 5)
@@ -1785,6 +1786,27 @@ def glitch_text(text):
         if text[pos] != ' ':  # Don't replace spaces
             result[pos] = random.choice(glitch_symbols)
     return ''.join(result)
+
+
+def wait_for_space():
+    """Block until the user presses space. Uses cbreak for single-key input."""
+    import sys
+    try:
+        import termios
+        import tty
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                ch = sys.stdin.read(1)
+                if ch == ' ':
+                    return
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except Exception:
+        # Fallback: require enter if direct space capture fails
+        input("Press [space] then Enter to continue...")
 
 
 def glitch_transition():
@@ -2087,7 +2109,6 @@ def perform_player_action(action):
         
         # Check if Forgotten Sanctum was defeated - if so, trigger victory
         if current_enemy_region == 'forgotten_sanctum':
-            # Trigger permanent glitch effect with victory message
             glitch_chars = list('#$%*^&@!~+=<>?/|')
             victory_msg = "You won"
             import shutil
@@ -2095,51 +2116,93 @@ def perform_player_action(action):
                 term_width, term_height = shutil.get_terminal_size()
             except Exception:
                 term_width, term_height = 80, 24
-            
+
             # Define the box dimensions for the message - make it bigger and more visible
             box_width = (len(victory_msg) + 10) * 5 // 2  # Half as wide
             box_height = 5 * 5 // 4  # Height reduced to ~6 rows
             box_left = (term_width - box_width) // 2 - 5  # Shifted left by 5
-            # Position box lower (70% down the screen)
-            box_top = int(term_height * 0.75) - (box_height // 2)
-            
-            try:
-                while True:
-                    clear()
-                    # Generate glitch screen with empty box in the middle
-                    for row in range(term_height):
-                        line = ''
-                        if box_top <= row < box_top + box_height:
-                            # We're in the box area - create empty space
-                            # Define border rows (just top and bottom for small box)
-                            if row == box_top or row == box_top + box_height - 1:
-                                # Top or bottom border rows - fill with spaces
-                                line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
-                                line += ' ' * box_width
-                                remaining = term_width - box_left - box_width
-                                if remaining > 0:
-                                    line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
-                            elif row == box_top + (box_height // 2):
-                                # Middle row with the text centered
-                                line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
-                                padding_left = (box_width - len(victory_msg)) // 2
-                                padding_right = box_width - padding_left - len(victory_msg)
-                                line += ' ' * padding_left + victory_msg + ' ' * padding_right
-                                remaining = term_width - box_left - box_width
-                                if remaining > 0:
-                                    line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
-                            else:
-                                # Other rows inside box - just empty space
-                                line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
-                                line += ' ' * box_width
-                                remaining = term_width - box_left - box_width
-                                if remaining > 0:
-                                    line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
+            # Position box at 70% down the screen
+            box_top = int(term_height * 0.7) - (box_height // 2)
+
+            def draw_victory_frame(message):
+                clear()
+                for row in range(term_height):
+                    line = ''
+                    if box_top <= row < box_top + box_height:
+                        if row == box_top or row == box_top + box_height - 1:
+                            line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                            line += ' ' * box_width
+                            remaining = term_width - box_left - box_width
+                            if remaining > 0:
+                                line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
+                        elif row == box_top + (box_height // 2):
+                            line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                            padding_left = (box_width - len(message)) // 2
+                            padding_right = box_width - padding_left - len(message)
+                            line += ' ' * padding_left + message + ' ' * padding_right
+                            remaining = term_width - box_left - box_width
+                            if remaining > 0:
+                                line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
                         else:
-                            # Regular glitch line outside the box
-                            line = ''.join(random.choice(glitch_chars) for _ in range(term_width))
-                        print(line[:term_width])
+                            line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                            line += ' ' * box_width
+                            remaining = term_width - box_left - box_width
+                            if remaining > 0:
+                                line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
+                    else:
+                        line = ''.join(random.choice(glitch_chars) for _ in range(term_width))
+                    print(line[:term_width])
+
+            # Phase 1: show "You won" for ~2 seconds
+            try:
+                for _ in range(int(2.0 / 0.08)):
+                    draw_victory_frame(victory_msg)
                     time.sleep(0.08)
+
+                # Phase 2: glitch out the text
+                glitched = glitch_text(victory_msg)
+                for _ in range(int(0.6 / 0.08)):
+                    draw_victory_frame(glitched)
+                    time.sleep(0.08)
+
+                # Phase 3: narrative lines, advance on space
+                lines = [
+                    "...You're awake again.",
+                    "Who am I?",
+                    "That's a silly question isn't it?",
+                    "Well, I'm sure you can guess.",
+                    "You built it to hide.",
+                    "You called 'them' illusions.",
+                    "Yes, do you realise?",
+                    "Why don't you check the kill list?",
+                    "Don't worry, I can show you.",
+                    "8. Mum",
+                    "7. Brother",
+                    "6. Sister",
+                    "5. Cousin",
+                    "4. Aunt",
+                    "3. Uncle",
+                    "2. Best Friend",
+                    "1. Dad",
+                    "Hahaha, that's right!!!",
+                    "You killed them all!",
+                    "Your poor dad even tried to stop you...",
+                    "You didn't escape any dream.",
+                    "You entered a nightmare.",
+                    "You'll never leave from this place.",
+                    "You don't have the courage to."
+                ]
+
+                for idx, line in enumerate(lines):
+                    is_last = idx == len(lines) - 1
+                    display_line = line if is_last else f"{line}  (press [space])"
+                    draw_victory_frame(display_line)
+                    if not is_last:
+                        wait_for_space()
+                # Final line: hold forever with glitch animation
+                while True:
+                    draw_victory_frame(lines[-1])
+                    time.sleep(0.12)
             except KeyboardInterrupt:
                 pass
             return
@@ -2313,9 +2376,18 @@ def curses_map_view(stdscr):
                     try:
                         maxy, maxx = stdscr.getmaxyx()
                         btn_text = f"{list_icon} Kill List"
-                        btn_start = maxx - len(btn_text) - 2
-                        if mx >= btn_start:
-                            return ("world4_button", False)
+                        # Use the rendered header text to align the hitbox accurately
+                        header_display = header_lines[0][:maxx-1]
+                        btn_start = header_display.rfind(btn_text)
+                        if btn_start != -1:
+                            btn_end = btn_start + len(btn_text)
+                            if btn_start <= mx < btn_end:
+                                return ("world4_button", False)
+                        else:
+                            # Fallback: check near the right edge (legacy behavior)
+                            fallback_start = maxx - len(btn_text) - 2
+                            if mx >= fallback_start:
+                                return ("world4_button", False)
                     except Exception:
                         # fallback conservative behavior
                         if mx >=  stdscr.getmaxyx()[1] - 30:
