@@ -717,6 +717,9 @@ killed_monsters = []
 current_enemy_name = None
 current_enemy_region = None
 
+# Forgotten Sanctum dialogue tracker
+forgotten_sanctum_dialogue_index = 0
+
 # --- MAP ART (UPDATED MAP WITH GRAVEYARD NEAR TOP) ---
 map_art = [
 "                                   N",
@@ -1771,6 +1774,19 @@ def format_bar(value, maximum, width=20):
     return "[" + "#" * filled + " " * (width - filled) + "]"
 
 
+def glitch_text(text):
+    """Replace random characters in text with glitch symbols"""
+    glitch_symbols = ['#', '&', '$', '*', '@', '%', '!']
+    result = list(text)
+    # Replace 20-40% of characters with glitches
+    num_glitches = random.randint(len(text) // 5, (len(text) * 2) // 5)
+    positions = random.sample(range(len(text)), min(num_glitches, len(text)))
+    for pos in positions:
+        if text[pos] != ' ':  # Don't replace spaces
+            result[pos] = random.choice(glitch_symbols)
+    return ''.join(result)
+
+
 def glitch_transition():
     """Display a glitch effect for 5 seconds when transitioning between worlds."""
     glitch_chars = list('#$%*^&@!~+=<>?/|')
@@ -1927,7 +1943,19 @@ def enter_combat(location_name=None):
     combat_started = True
     player_max_hp = 100
     player_hp = player_max_hp
-    enemy_max_hp = 80
+    
+    # Set enemy HP based on region
+    region_hp_map = {
+        'whispering_pines': 20,
+        'silent_graveyard': 30,
+        'hollowed_farmlands': 50,
+        'sunken_marketplace': 60,
+        'old_residential_district': 120,
+        'mirror_marsh': 200,
+        'obsidian_quarry': 20,
+        'forgotten_sanctum': 500
+    }
+    enemy_max_hp = region_hp_map.get(region_key, 80)
     enemy_hp = enemy_max_hp
     player_heals = 3
     player_ability_charges = 1
@@ -1970,19 +1998,59 @@ def draw_combat_ui():
     print(actions.center(width))
 
 def perform_player_action(action):
-    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters, consecutive_defeats
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters, consecutive_defeats, forgotten_sanctum_dialogue_index
     if action == 'attack':
         dmg = random.randint(8, 15)
-        enemy_hp -= dmg
-        combat_log.append(f"You attack the enemy for {dmg} dmg.")
+        
+        # Forgotten Sanctum: special dialogue instead of normal attack message
+        if current_enemy_region == 'forgotten_sanctum':
+            sanctum_dialogues = [
+                "Have you really forgotten us?",
+                "Why are you doing this to me, to US??",
+                "Please, stop...",
+                "I know you're not like this..",
+                "Snap out of it..",
+                "You're dreaming...",
+                "You promised you had it controlled..",
+                "PLEASE!!",
+                "STOP!!",
+                "Why...",
+                "WHY..."
+            ]
+            dialogue = sanctum_dialogues[forgotten_sanctum_dialogue_index % len(sanctum_dialogues)]
+            glitched_dialogue = glitch_text(dialogue)
+            combat_log.append(f"[{glitched_dialogue}] You deal {dmg} dmg.")
+            forgotten_sanctum_dialogue_index += 1
+            enemy_hp -= dmg
+        # Obsidian Quarry: 90% chance to miss
+        elif current_enemy_region == 'obsidian_quarry':
+            if random.random() < 0.9:
+                dmg = 0
+                combat_log.append("Your attack missed!")
+            else:
+                enemy_hp -= dmg
+                combat_log.append(f"You attack the enemy for {dmg} dmg.")
+        else:
+            # Mirror Marsh: 50% chance to deal double damage
+            if current_enemy_region == 'mirror_marsh' and random.random() < 0.5:
+                dmg *= 2
+                combat_log.append(f"You attack with DOUBLE DAMAGE for {dmg} dmg!")
+            else:
+                combat_log.append(f"You attack the enemy for {dmg} dmg.")
+            enemy_hp -= dmg
     elif action == 'heal':
         if player_heals <= 0:
             combat_log.append("No heals left!")
         else:
             heal = random.randint(12, 25)
+            # Mirror Marsh: double healing
+            if current_enemy_region == 'mirror_marsh':
+                heal *= 2
+                combat_log.append(f"You heal for DOUBLE AMOUNT: {heal} HP!")
+            else:
+                combat_log.append(f"You heal for {heal} HP.")
             player_hp = min(player_max_hp, player_hp + heal)
             player_heals -= 1
-            combat_log.append(f"You heal for {heal} HP.")
     elif action == 'ability':
         if player_ability_charges <= 0:
             combat_log.append("No ability charges!")
@@ -2022,26 +2090,56 @@ def perform_player_action(action):
             # Trigger permanent glitch effect with victory message
             glitch_chars = list('#$%*^&@!~+=<>?/|')
             victory_msg = "You won"
-            terminal_width = 80
-            terminal_height = 30
-            victory_row = terminal_height // 2
+            import shutil
+            try:
+                term_width, term_height = shutil.get_terminal_size()
+            except Exception:
+                term_width, term_height = 80, 24
+            
+            # Define the box dimensions for the message - make it bigger and more visible
+            box_width = (len(victory_msg) + 10) * 5 // 2  # Half as wide
+            box_height = 5 * 5 // 4  # Height reduced to ~6 rows
+            box_left = (term_width - box_width) // 2 - 5  # Shifted left by 5
+            # Position box at 50% down the screen
+            box_top = int(term_height * 0.5) - (box_height // 2)
+            
             try:
                 while True:
-                    print('\n' * 50)  # clear screen
-                    # Generate glitch lines before victory message
-                    for row in range(terminal_height):
-                        if row == victory_row:
-                            # Center the "You won" message on this row
-                            padding = (terminal_width - len(victory_msg)) // 2
-                            glitch_before = ''.join(random.choice(glitch_chars) for _ in range(padding))
-                            glitch_after = ''.join(random.choice(glitch_chars) for _ in range(terminal_width - padding - len(victory_msg)))
-                            print(glitch_before + victory_msg + glitch_after)
+                    clear()
+                    # Generate glitch screen with empty box in the middle
+                    for row in range(term_height):
+                        line = ''
+                        if box_top <= row < box_top + box_height:
+                            # We're in the box area - create empty space
+                            # Define border rows (just top and bottom for small box)
+                            if row == box_top or row == box_top + box_height - 1:
+                                # Top or bottom border rows - fill with spaces
+                                line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                                line += ' ' * box_width
+                                remaining = term_width - box_left - box_width
+                                if remaining > 0:
+                                    line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
+                            elif row == box_top + (box_height // 2):
+                                # Middle row with the text centered
+                                line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                                padding_left = (box_width - len(victory_msg)) // 2
+                                padding_right = box_width - padding_left - len(victory_msg)
+                                line += ' ' * padding_left + victory_msg + ' ' * padding_right
+                                remaining = term_width - box_left - box_width
+                                if remaining > 0:
+                                    line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
+                            else:
+                                # Other rows inside box - just empty space
+                                line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                                line += ' ' * box_width
+                                remaining = term_width - box_left - box_width
+                                if remaining > 0:
+                                    line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
                         else:
-                            # Regular glitch line
-                            line_length = random.randint(40, 80)
-                            glitch_line = ''.join(random.choice(glitch_chars) for _ in range(line_length))
-                            print(glitch_line)
-                    time.sleep(0.5)
+                            # Regular glitch line outside the box
+                            line = ''.join(random.choice(glitch_chars) for _ in range(term_width))
+                        print(line[:term_width])
+                    time.sleep(0.08)
             except KeyboardInterrupt:
                 pass
             return
@@ -2059,8 +2157,19 @@ def perform_player_action(action):
 
     # enemy turn
     edmg = random.randint(5, 14)
+    
+    # Forgotten Sanctum: only 1 damage per hit
+    if current_enemy_region == 'forgotten_sanctum':
+        edmg = 1
+        combat_log.append(f"Enemy hits you for {edmg} dmg.")
+    # Mirror Marsh: 50% chance to deal double damage
+    elif current_enemy_region == 'mirror_marsh' and random.random() < 0.5:
+        edmg *= 2
+        combat_log.append(f"Enemy hits you with DOUBLE DAMAGE for {edmg} dmg!")
+    else:
+        combat_log.append(f"Enemy hits you for {edmg} dmg.")
+    
     player_hp -= edmg
-    combat_log.append(f"Enemy hits you for {edmg} dmg.")
     if player_hp <= 0:
         combat_log.append("You were slain...")
         combat_started = False
@@ -2084,7 +2193,7 @@ def curses_map_view(stdscr):
     list_icon = "[≡]"
     # keep header compact to avoid wrapping issues on narrow terminals
     header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}   {list_icon} Kill List"
-    header_lines = [header_line1, "You seem to have transported to another world... Click on bolded text to enter dungeon.", ""]
+    header_lines = [header_line1, "You seem to have transported to another world... Click on bolded text to enter dungeon. Use arrow keys to navigate.", ""]
     # prepare a full-screen line buffer and render only changed lines
     try:
         maxy, maxx = stdscr.getmaxyx()
@@ -2525,6 +2634,7 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 
 def curses_blackhole_view(stdscr):
     """Animated black hole (planet + ships) view using curses."""
+    global money, timea, rate, adminmultiplier, othermultiplier
     curses.curs_set(0)
     stdscr.nodelay(True)
     stdscr.keypad(True)
@@ -2532,6 +2642,14 @@ def curses_blackhole_view(stdscr):
     import math
 
     while True:
+        # Handle money generation
+        timea += 0.1
+        if timea >= 1:
+            money += (
+                rate * adminmultiplier * othermultiplier * ships_money_multiplier()
+            )
+            timea = 0.0
+        
         stdscr.erase()
         maxy, maxx = stdscr.getmaxyx()
         title = "=== BLACK HOLE - ORBITAL VIEW ==="
@@ -3258,6 +3376,22 @@ def main():
                         for ore_name in ore_inventory:
                             ore_inventory[ore_name] += 50
                         admin_ore_granted_msg = "[ADMIN] +50 ore granted!"
+                    except Exception:
+                        pass
+                    continue
+                elif k == 'p':
+                    # Debug shortcut: go to world 2 map and unlock all dungeons except forgotten_sanctum
+                    try:
+                        # Mark all dungeons before forgotten_sanctum as defeated
+                        defeated_regions.add('whispering_pines')
+                        defeated_regions.add('silent_graveyard')
+                        defeated_regions.add('hollowed_farmlands')
+                        defeated_regions.add('sunken_marketplace')
+                        defeated_regions.add('old_residential_district')
+                        defeated_regions.add('mirror_marsh')
+                        defeated_regions.add('obsidian_quarry')
+                        # Move to world 2 without glitch transition
+                        world = 2
                     except Exception:
                         pass
                     continue
