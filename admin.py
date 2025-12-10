@@ -491,18 +491,40 @@ def mining_view():
                 spawn_new_ore()
             draw_mine_shaft()
 
-            # Right column: technology list
-            print("=== TECHNOLOGY ===")
-            available = []
+            # Right column: technology list + ASCII tree (side-by-side when wide enough)
+            import shutil
+            cols = shutil.get_terminal_size().columns
+
+            available_lines = []
+            available_lines.append("=== TECHNOLOGY ===")
             for tech in technology:
                 if not tech.get("purchased"):
-                    available.append(tech)
-            if not available:
-                print("(None available)")
-            else:
-                for tech in available:
                     ore_costs = " ".join(f"{n[:3]}:{a}" for n, a in tech.get("ore_costs", {}).items())
-                    print(f"[{tech['key'].upper()}] {tech['name']} - {ore_costs} | ${tech['money_cost']}")
+                    available_lines.append(f"[{tech['key'].upper()}] {tech['name']} - {ore_costs} | ${tech['money_cost']}")
+            if len(available_lines) == 1:
+                available_lines.append("(None available)")
+
+            # Get ASCII tree lines
+            tree_lines = get_technology_tree_lines()
+
+            # compute widths and decide side-by-side
+            max_tree_w = max((len(l) for l in tree_lines), default=0)
+            # reserve at least 30 cols for left list
+            left_w = max(30, cols - max_tree_w - 3)
+            if left_w >= 30 and cols >= 80:
+                # side-by-side layout
+                lines = max(len(available_lines), len(tree_lines))
+                for i in range(lines):
+                    left = available_lines[i] if i < len(available_lines) else ""
+                    right = tree_lines[i] if i < len(tree_lines) else ""
+                    print(left.ljust(left_w) + "  " + right)
+            else:
+                # fallback: print available list, then tree below
+                for ln in available_lines:
+                    print(ln)
+                print("")
+                for ln in tree_lines:
+                    print(ln)
 
             last_money = money
             last_ore_hp = ore_hp
@@ -1709,7 +1731,80 @@ def draw_technology_tree():
     
     while len(nodes) < 20:
         nodes.append("[  : ]")
-    
+    # If terminal is narrow, fall back to a compact two-column list
+    try:
+        import shutil
+        cols = shutil.get_terminal_size().columns
+    except Exception:
+        cols = 80
+
+    if cols < 80:
+        # Build compact entries
+        entries = []
+        for tech in technology:
+            mark = "X" if tech.get("purchased") else " "
+            entries.append(f"[{tech['key'].upper()}] {tech['name']} {'(X)' if mark=='X' else ''}")
+
+        # decide on columns: use 2 columns if wide enough, else 1
+        if cols >= 40:
+            colw = cols // 2
+            left = entries[0::2]
+            right = entries[1::2]
+            for i in range(max(len(left), len(right))):
+                l = left[i] if i < len(left) else ""
+                r = right[i] if i < len(right) else ""
+                print(l.ljust(colw - 1) + " " + r)
+        else:
+            for e in entries:
+                print(e)
+        return
+
+    # default wide ASCII tree
+    tree = f"""
+                           {nodes[0]}
+                              |
+                    ┌─────────┴─────────┐
+                    |                   |
+                 {nodes[1]}            {nodes[2]}
+                    |                   |
+          ┌─────────┴────────┐          |
+          |                  |          |
+       {nodes[3]}         {nodes[4]}  {nodes[5]}
+          |                  |          |
+    ┌─────┴─────┐            |          |
+    |           |            |          |
+ {nodes[6]}  {nodes[7]}   {nodes[8]}  {nodes[9]}
+    |           |            |          |
+     |           |
+     └─────┬─────┴──────┐
+             |            |
+         {nodes[12]}  {nodes[13]}
+             |            |
+     ┌─────┴─────┐      |
+     |           |      |
+ {nodes[14]}  {nodes[15]} {nodes[16]}
+     |           |      |
+     └─────┬─────┴──────┘
+             |
+     ┌─────┴─────┐
+     |           |
+ {nodes[17]}  {nodes[18]}
+     |           |
+     └─────┬─────┘
+             |
+         {nodes[19]}
+     """
+    print(tree)
+
+
+def get_technology_tree_lines():
+    """Return the wide ASCII technology tree as a list of lines (no printing)."""
+    nodes = []
+    for tech in technology:
+        mark = "X" if tech.get("purchased") else " "
+        nodes.append(f"[{tech['key'].upper()}:{mark}]")
+    while len(nodes) < 20:
+        nodes.append("[  : ]")
     tree = f"""
                            {nodes[0]}
                               |
@@ -1749,7 +1844,7 @@ def draw_technology_tree():
           |
        {nodes[19]}
     """
-    print(tree)
+    return tree.splitlines()
 
 # --- MOUSE CLICK FUNCTIONS ---
 def enable_mouse():
