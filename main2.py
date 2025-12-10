@@ -772,7 +772,7 @@ map_art = [
 "                                         ▓           ▓",
 "                                          ▓▓▓▓▓▓▓▓▓▓▓",
 "                                                 ",
-"                                                                     
+"                                                 ",
 ]
 
 # clickable labels (all 8 locations + graveyard)
@@ -3448,22 +3448,6 @@ def main():
                         for ore_name in ore_inventory:
                             ore_inventory[ore_name] += 50
                         admin_ore_granted_msg = "[ADMIN] +50 ore granted!"
-                    except Exception:
-                        pass
-                    continue
-                elif k == 'p':
-                    # Debug shortcut: go to world 2 map and unlock all dungeons except forgotten_sanctum
-                    try:
-                        # Mark all dungeons before forgotten_sanctum as defeated
-                        defeated_regions.add('whispering_pines')
-                        defeated_regions.add('silent_graveyard')
-                        defeated_regions.add('hollowed_farmlands')
-                        defeated_regions.add('sunken_marketplace')
-                        defeated_regions.add('old_residential_district')
-                        defeated_regions.add('mirror_marsh')
-                        defeated_regions.add('obsidian_quarry')
-                        # Move to world 2 without glitch transition
-                        world = 2
                     except Exception:
                         pass
                     continue
