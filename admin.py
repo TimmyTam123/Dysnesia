@@ -31,6 +31,9 @@ locale.setlocale(locale.LC_ALL, '')
 # Debug: temporarily log raw keys to help diagnose missing admin key presses
 DEBUG_KEYLOG = True
 
+# Track whether the program is currently running inside a curses session
+using_curses = False
+
 # --- CROSS-PLATFORM get_char ---
 USING_WINDOWS = sys.platform == "win32"
 if USING_WINDOWS:
@@ -185,6 +188,12 @@ def init_curses_window(win):
         maxy, maxx = win.getmaxyx()
         if not hasattr(win, '_last_screen') or len(win._last_screen) != maxy:
             win._last_screen = [''] * maxy
+    except Exception:
+        pass
+    # mark that we're running inside curses so other code avoids raw-prints
+    try:
+        global using_curses
+        using_curses = True
     except Exception:
         pass
 
@@ -2137,7 +2146,7 @@ def draw_combat_ui():
     print(actions.center(width))
 
 def perform_player_action(action):
-    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters, consecutive_defeats, forgotten_sanctum_dialogue_index
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters, consecutive_defeats, forgotten_sanctum_dialogue_index, using_curses
     if action == 'attack':
         dmg = random.randint(8, 15)
         
@@ -2226,6 +2235,10 @@ def perform_player_action(action):
         
         # Check if Forgotten Sanctum was defeated - if so, trigger victory
         if current_enemy_region == 'forgotten_sanctum':
+            # If we're running inside curses, avoid doing raw console prints here —
+            # the curses view (`curses_combat`) will present the victory screen.
+            if using_curses:
+                return
             glitch_chars = list('#$%*^&@!~+=<>?/|')
             victory_msg = "You won"
             import shutil
