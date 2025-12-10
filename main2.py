@@ -1394,12 +1394,12 @@ def generate_planet_art(size, ships):
 
 
 blackhole_upgrades = [
-    {"key": "z", "name": "Siphon Matter", "desc": "+50 rate", "base_cost": 50000000000000, "cost": 50000000000000, "multiplier": 1.35, "count": 0, "max": 20, "seen": False},
-    {"key": "x", "name": "Event Horizon", "desc": "+2 ships", "base_cost": 250000000000000, "cost": 250000000000000, "multiplier": 1.6, "count": 0, "max": 10, "seen": False},
-    {"key": "c", "name": "Singularity Core", "desc": "+50% other mult", "base_cost": 100000000000000, "cost": 100000000000000, "multiplier": 1.5, "count": 0, "max": 6, "seen": False},
-    {"key": "v", "name": "Accretion Ring", "desc": "Grow size", "base_cost": 2500000000000000, "cost": 2500000000000000, "multiplier": 1.35, "count": 0, "max": 8, "seen": False},
-    {"key": "s", "name": "Orbital Dockyards", "desc": "+1 ship", "base_cost": 10000000000000000, "cost": 10000000000000000, "multiplier": 1.5, "count": 0, "max": 50, "seen": False},
-    {"key": "n", "name": "Break The Reality", "desc": "Break the reality", "base_cost": 100000000000000000, "cost": 100000000000000000, "multiplier": 0, "count": 0, "max": 1, "seen": False},
+    {"key": "z", "name": "Siphon Matter", "desc": "+50 rate", "base_cost": 5000000000000, "cost": 5000000000000, "multiplier": 1.35, "count": 0, "max": 20, "seen": False},
+    {"key": "x", "name": "Event Horizon", "desc": "+2 ships", "base_cost": 25000000000000, "cost": 25000000000000, "multiplier": 1.6, "count": 0, "max": 10, "seen": False},
+    {"key": "c", "name": "Singularity Core", "desc": "+50% other mult", "base_cost": 10000000000000, "cost": 10000000000000, "multiplier": 1.5, "count": 0, "max": 6, "seen": False},
+    {"key": "v", "name": "Accretion Ring", "desc": "Grow size", "base_cost": 250000000000000, "cost": 250000000000000, "multiplier": 1.35, "count": 0, "max": 8, "seen": False},
+    {"key": "s", "name": "Orbital Dockyards", "desc": "+1 ship", "base_cost": 1000000000000000, "cost": 1000000000000000, "multiplier": 1.5, "count": 0, "max": 50, "seen": False},
+    {"key": "n", "name": "Break The Reality", "desc": "Break the reality", "base_cost": 10000000000000000, "cost": 10000000000000000, "multiplier": 0, "count": 0, "max": 1, "seen": False},
 ]
 
 
