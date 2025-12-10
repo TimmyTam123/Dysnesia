@@ -31,6 +31,9 @@ locale.setlocale(locale.LC_ALL, '')
 # Debug: temporarily log raw keys to help diagnose missing admin key presses
 DEBUG_KEYLOG = True
 
+# Track whether the program is currently running inside a curses session
+using_curses = False
+
 # --- CROSS-PLATFORM get_char ---
 USING_WINDOWS = sys.platform == "win32"
 if USING_WINDOWS:
@@ -185,6 +188,12 @@ def init_curses_window(win):
         maxy, maxx = win.getmaxyx()
         if not hasattr(win, '_last_screen') or len(win._last_screen) != maxy:
             win._last_screen = [''] * maxy
+    except Exception:
+        pass
+    # mark that we're running inside curses so other code avoids raw-prints
+    try:
+        global using_curses
+        using_curses = True
     except Exception:
         pass
 
@@ -373,7 +382,12 @@ def home_view():
     last_upgrades = None
     need_render = True
 
+    global home_needs_update, last_money_for_home
+    if last_money_for_home is None:
+        last_money_for_home = None
+
     while world == 1 and page == 0:
+        now = time.time()
         if need_render:
             clear()
             print(f"Money: {money:.2f}\n")
@@ -404,9 +418,12 @@ def home_view():
 
             last_money = money
             last_upgrades = w1upgrades
+            last_money_for_home = money
+            home_needs_update = False
+            last_home_render_time = now
             need_render = False
 
-        # update money timer (don't force redraw here; render only when value changed)
+        # update money timer locally; only mark for update when money actually changes
         timea += 0.1
         if timea >= 1:
             money += rate * adminmultiplier * othermultiplier
@@ -431,11 +448,16 @@ def home_view():
                 for upg in upgrades:
                     if k == upg["key"]:
                         buy_upgrade(upg)
-                        need_render = True
+                        # buy_upgrade will set `home_needs_update`
                         break
 
-        # re-render if money or upgrades changed externally
-        if money != last_money or w1upgrades != last_upgrades:
+        # re-render only if money increased or upgrades changed externally
+        # but debounce rapid consecutive renders using last_home_render_time
+        if home_needs_update:
+            need_render = True
+        elif (last_money_for_home is not None and money > last_money_for_home) and (time.time() - last_home_render_time) >= 0.5:
+            need_render = True
+        elif w1upgrades != last_upgrades:
             need_render = True
 
         time.sleep(0.1)
@@ -478,18 +500,40 @@ def mining_view():
                 spawn_new_ore()
             draw_mine_shaft()
 
-            # Right column: technology list
-            print("=== TECHNOLOGY ===")
-            available = []
+            # Right column: technology list + ASCII tree (side-by-side when wide enough)
+            import shutil
+            cols = shutil.get_terminal_size().columns
+
+            available_lines = []
+            available_lines.append("=== TECHNOLOGY ===")
             for tech in technology:
                 if not tech.get("purchased"):
-                    available.append(tech)
-            if not available:
-                print("(None available)")
-            else:
-                for tech in available:
                     ore_costs = " ".join(f"{n[:3]}:{a}" for n, a in tech.get("ore_costs", {}).items())
-                    print(f"[{tech['key'].upper()}] {tech['name']} - {ore_costs} | ${tech['money_cost']}")
+                    available_lines.append(f"[{tech['key'].upper()}] {tech['name']} - {ore_costs} | ${tech['money_cost']}")
+            if len(available_lines) == 1:
+                available_lines.append("(None available)")
+
+            # Get ASCII tree lines
+            tree_lines = get_technology_tree_lines()
+
+            # compute widths and decide side-by-side
+            max_tree_w = max((len(l) for l in tree_lines), default=0)
+            # reserve at least 30 cols for left list
+            left_w = max(30, cols - max_tree_w - 3)
+            if left_w >= 30 and cols >= 80:
+                # side-by-side layout
+                lines = max(len(available_lines), len(tree_lines))
+                for i in range(lines):
+                    left = available_lines[i] if i < len(available_lines) else ""
+                    right = tree_lines[i] if i < len(tree_lines) else ""
+                    print(left.ljust(left_w) + "  " + right)
+            else:
+                # fallback: print available list, then tree below
+                for ln in available_lines:
+                    print(ln)
+                print("")
+                for ln in tree_lines:
+                    print(ln)
 
             last_money = money
             last_ore_hp = ore_hp
@@ -582,6 +626,10 @@ def ships_money_multiplier():
 # research rendering state
 last_money_for_research = None
 research_needs_update = True
+# home (city) rendering state
+last_money_for_home = None
+home_needs_update = True
+last_home_render_time = 0.0
 
 # --- SANITY / PROGRESSION STATE ---
 # Sanity accumulates from upgrades on a rotating active page. When full,
@@ -717,6 +765,9 @@ killed_monsters = []
 current_enemy_name = None
 current_enemy_region = None
 
+# Forgotten Sanctum dialogue tracker
+forgotten_sanctum_dialogue_index = 0
+
 # --- MAP ART (UPDATED MAP WITH GRAVEYARD NEAR TOP) ---
 map_art = [
 "                                   N",
@@ -727,7 +778,7 @@ map_art = [
 "         /\\   /\\    /\\      ~ ~ ~  |    /\\   /  \\    /\\ ",
 "       /  \\ /  \\  /  \\  ~ ~ ~ ~ ~  |   /  \\_/    \\__/  \\",
 "      /    \\/    \\/    \\           |  /                  \\",
-"     /    FOREST TRAIL    \\         | /   SILENT GRAVEYARD \\",
+"     /   (FOREST TRAIL)   \\         | /   SILENT GRAVEYARD \\",
 "    /                      \\        |/    ╔══════════════╗  \\",
 "   /________________________\\       /\\    ║  XX X XXX  X ║   \\",
 "                             \\     /  \\   ║   X XX    X   ║    \\",
@@ -769,7 +820,7 @@ map_art = [
 "                                         ▓           ▓",
 "                                          ▓▓▓▓▓▓▓▓▓▓▓",
 "                                                 ",
-"                           (To Elysea after defeating Terivon)",
+"                                                 ",
 ]
 
 # clickable labels (all 8 locations + graveyard)
@@ -906,9 +957,10 @@ def make_absolute_zones(map_lines, map_top_row):
     """
     labels = locate_labels_in_map(map_lines)
     zones = {}
-    pad_col = 2
-    pad_row_top = 0
-    pad_row_bottom = 0
+    # Expand padding so click hitboxes are generous around the visible text
+    pad_col = 6
+    pad_row_top = 1
+    pad_row_bottom = 1
     for name_key, data in labels.items():
         # data can be (row, start_char_index, first_len, second_len, display_col)
         if len(data) == 5:
@@ -1552,6 +1604,11 @@ def buy_upgrade(upg):
     try:
         global research_needs_update
         research_needs_update = True
+        try:
+            global home_needs_update
+            home_needs_update = True
+        except Exception:
+            pass
     except Exception:
         pass
     if upg["count"] < upg["max"]:
@@ -1683,7 +1740,80 @@ def draw_technology_tree():
     
     while len(nodes) < 20:
         nodes.append("[  : ]")
-    
+    # If terminal is narrow, fall back to a compact two-column list
+    try:
+        import shutil
+        cols = shutil.get_terminal_size().columns
+    except Exception:
+        cols = 80
+
+    if cols < 80:
+        # Build compact entries
+        entries = []
+        for tech in technology:
+            mark = "X" if tech.get("purchased") else " "
+            entries.append(f"[{tech['key'].upper()}] {tech['name']} {'(X)' if mark=='X' else ''}")
+
+        # decide on columns: use 2 columns if wide enough, else 1
+        if cols >= 40:
+            colw = cols // 2
+            left = entries[0::2]
+            right = entries[1::2]
+            for i in range(max(len(left), len(right))):
+                l = left[i] if i < len(left) else ""
+                r = right[i] if i < len(right) else ""
+                print(l.ljust(colw - 1) + " " + r)
+        else:
+            for e in entries:
+                print(e)
+        return
+
+    # default wide ASCII tree
+    tree = f"""
+                           {nodes[0]}
+                              |
+                    ┌─────────┴─────────┐
+                    |                   |
+                 {nodes[1]}            {nodes[2]}
+                    |                   |
+          ┌─────────┴────────┐          |
+          |                  |          |
+       {nodes[3]}         {nodes[4]}  {nodes[5]}
+          |                  |          |
+    ┌─────┴─────┐            |          |
+    |           |            |          |
+ {nodes[6]}  {nodes[7]}   {nodes[8]}  {nodes[9]}
+    |           |            |          |
+     |           |
+     └─────┬─────┴──────┐
+             |            |
+         {nodes[12]}  {nodes[13]}
+             |            |
+     ┌─────┴─────┐      |
+     |           |      |
+ {nodes[14]}  {nodes[15]} {nodes[16]}
+     |           |      |
+     └─────┬─────┴──────┘
+             |
+     ┌─────┴─────┐
+     |           |
+ {nodes[17]}  {nodes[18]}
+     |           |
+     └─────┬─────┘
+             |
+         {nodes[19]}
+     """
+    print(tree)
+
+
+def get_technology_tree_lines():
+    """Return the wide ASCII technology tree as a list of lines (no printing)."""
+    nodes = []
+    for tech in technology:
+        mark = "X" if tech.get("purchased") else " "
+        nodes.append(f"[{tech['key'].upper()}:{mark}]")
+    while len(nodes) < 20:
+        nodes.append("[  : ]")
     tree = f"""
                            {nodes[0]}
                               |
@@ -1723,7 +1853,7 @@ def draw_technology_tree():
           |
        {nodes[19]}
     """
-    print(tree)
+    return tree.splitlines()
 
 # --- MOUSE CLICK FUNCTIONS ---
 def enable_mouse():
@@ -1769,6 +1899,40 @@ def format_bar(value, maximum, width=20):
     pct = max(0, min(1.0, float(value) / float(maximum))) if maximum > 0 else 0
     filled = int(pct * width)
     return "[" + "#" * filled + " " * (width - filled) + "]"
+
+
+def glitch_text(text):
+    """Replace random characters in text with glitch symbols"""
+    glitch_symbols = ['#', '&', '$', '*', '@', '%', '!', '(', ')']
+    result = list(text)
+    # Replace 20-40% of characters with glitches
+    num_glitches = random.randint(len(text) // 5, (len(text) * 2) // 5)
+    positions = random.sample(range(len(text)), min(num_glitches, len(text)))
+    for pos in positions:
+        if text[pos] != ' ':  # Don't replace spaces
+            result[pos] = random.choice(glitch_symbols)
+    return ''.join(result)
+
+
+def wait_for_space():
+    """Block until the user presses space. Uses cbreak for single-key input."""
+    import sys
+    try:
+        import termios
+        import tty
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                ch = sys.stdin.read(1)
+                if ch == ' ':
+                    return
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except Exception:
+        # Fallback: require enter if direct space capture fails
+        input("Press [space] then Enter to continue...")
 
 
 def glitch_transition():
@@ -1867,11 +2031,11 @@ ENEMY_ASCII = {
 
 # Player ASCII (left side) — stays consistent across all combats
 PLAYER_ASCII = [
-    "  (\\_/)",
-    "  (•_•)",
-    " <( : ) ",
-    "  /   \\",
-    "  /___\\",
+    " (\\_",
+    "  ( •_•)",
+    "  /︶\\╰─*>",
+    "",
+    "",
 ]
 
 
@@ -1927,7 +2091,19 @@ def enter_combat(location_name=None):
     combat_started = True
     player_max_hp = 100
     player_hp = player_max_hp
-    enemy_max_hp = 80
+    
+    # Set enemy HP based on region
+    region_hp_map = {
+        'whispering_pines': 20,
+        'silent_graveyard': 30,
+        'hollowed_farmlands': 50,
+        'sunken_marketplace': 60,
+        'old_residential_district': 120,
+        'mirror_marsh': 200,
+        'obsidian_quarry': 20,
+        'forgotten_sanctum': 500
+    }
+    enemy_max_hp = region_hp_map.get(region_key, 80)
     enemy_hp = enemy_max_hp
     player_heals = 3
     player_ability_charges = 1
@@ -1970,19 +2146,59 @@ def draw_combat_ui():
     print(actions.center(width))
 
 def perform_player_action(action):
-    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters, consecutive_defeats
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters, consecutive_defeats, forgotten_sanctum_dialogue_index, using_curses
     if action == 'attack':
         dmg = random.randint(8, 15)
-        enemy_hp -= dmg
-        combat_log.append(f"You attack the enemy for {dmg} dmg.")
+        
+        # Forgotten Sanctum: special dialogue instead of normal attack message
+        if current_enemy_region == 'forgotten_sanctum':
+            sanctum_dialogues = [
+                "Have you really forgotten us?",
+                "Why are you doing this to me, to US??",
+                "Please, stop...",
+                "I know you're not like this..",
+                "Snap out of it..",
+                "You're dreaming...",
+                "You promised you had it controlled..",
+                "PLEASE!!",
+                "STOP!!",
+                "Why...",
+                "WHY..."
+            ]
+            dialogue = sanctum_dialogues[forgotten_sanctum_dialogue_index % len(sanctum_dialogues)]
+            glitched_dialogue = glitch_text(dialogue)
+            combat_log.append(f"[{glitched_dialogue}] You deal {dmg} dmg.")
+            forgotten_sanctum_dialogue_index += 1
+            enemy_hp -= dmg
+        # Obsidian Quarry: 90% chance to miss
+        elif current_enemy_region == 'obsidian_quarry':
+            if random.random() < 0.9:
+                dmg = 0
+                combat_log.append("Your attack missed!")
+            else:
+                enemy_hp -= dmg
+                combat_log.append(f"You attack the enemy for {dmg} dmg.")
+        else:
+            # Mirror Marsh: 50% chance to deal double damage
+            if current_enemy_region == 'mirror_marsh' and random.random() < 0.5:
+                dmg *= 2
+                combat_log.append(f"You attack with DOUBLE DAMAGE for {dmg} dmg!")
+            else:
+                combat_log.append(f"You attack the enemy for {dmg} dmg.")
+            enemy_hp -= dmg
     elif action == 'heal':
         if player_heals <= 0:
             combat_log.append("No heals left!")
         else:
             heal = random.randint(12, 25)
+            # Mirror Marsh: double healing
+            if current_enemy_region == 'mirror_marsh':
+                heal *= 2
+                combat_log.append(f"You heal for DOUBLE AMOUNT: {heal} HP!")
+            else:
+                combat_log.append(f"You heal for {heal} HP.")
             player_hp = min(player_max_hp, player_hp + heal)
             player_heals -= 1
-            combat_log.append(f"You heal for {heal} HP.")
     elif action == 'ability':
         if player_ability_charges <= 0:
             combat_log.append("No ability charges!")
@@ -2019,29 +2235,104 @@ def perform_player_action(action):
         
         # Check if Forgotten Sanctum was defeated - if so, trigger victory
         if current_enemy_region == 'forgotten_sanctum':
-            # Trigger permanent glitch effect with victory message
+            # If we're running inside curses, avoid doing raw console prints here —
+            # the curses view (`curses_combat`) will present the victory screen.
+            if using_curses:
+                return
             glitch_chars = list('#$%*^&@!~+=<>?/|')
             victory_msg = "You won"
-            terminal_width = 80
-            terminal_height = 30
-            victory_row = terminal_height // 2
+            import shutil
             try:
-                while True:
-                    print('\n' * 50)  # clear screen
-                    # Generate glitch lines before victory message
-                    for row in range(terminal_height):
-                        if row == victory_row:
-                            # Center the "You won" message on this row
-                            padding = (terminal_width - len(victory_msg)) // 2
-                            glitch_before = ''.join(random.choice(glitch_chars) for _ in range(padding))
-                            glitch_after = ''.join(random.choice(glitch_chars) for _ in range(terminal_width - padding - len(victory_msg)))
-                            print(glitch_before + victory_msg + glitch_after)
+                term_width, term_height = shutil.get_terminal_size()
+            except Exception:
+                term_width, term_height = 80, 24
+
+            # Define the box dimensions for the message - make it bigger and more visible
+            box_width = (len(victory_msg) + 10) * 5 // 2  # Half as wide
+            box_height = 5 * 5 // 4  # Height reduced to ~6 rows
+            box_left = (term_width - box_width) // 2 - 5  # Shifted left by 5
+            # Position box at 70% down the screen
+            box_top = int(term_height * 0.7) - (box_height // 2)
+
+            def draw_victory_frame(message):
+                clear()
+                for row in range(term_height):
+                    line = ''
+                    if box_top <= row < box_top + box_height:
+                        if row == box_top or row == box_top + box_height - 1:
+                            line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                            line += ' ' * box_width
+                            remaining = term_width - box_left - box_width
+                            if remaining > 0:
+                                line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
+                        elif row == box_top + (box_height // 2):
+                            line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                            padding_left = (box_width - len(message)) // 2
+                            padding_right = box_width - padding_left - len(message)
+                            line += ' ' * padding_left + message + ' ' * padding_right
+                            remaining = term_width - box_left - box_width
+                            if remaining > 0:
+                                line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
                         else:
-                            # Regular glitch line
-                            line_length = random.randint(40, 80)
-                            glitch_line = ''.join(random.choice(glitch_chars) for _ in range(line_length))
-                            print(glitch_line)
-                    time.sleep(0.5)
+                            line = ''.join(random.choice(glitch_chars) for _ in range(box_left))
+                            line += ' ' * box_width
+                            remaining = term_width - box_left - box_width
+                            if remaining > 0:
+                                line += ''.join(random.choice(glitch_chars) for _ in range(remaining))
+                    else:
+                        line = ''.join(random.choice(glitch_chars) for _ in range(term_width))
+                    print(line[:term_width])
+
+            # Phase 1: show "You won" for ~2 seconds
+            try:
+                for _ in range(int(2.0 / 0.08)):
+                    draw_victory_frame(victory_msg)
+                    time.sleep(0.08)
+
+                # Phase 2: glitch out the text
+                glitched = glitch_text(victory_msg)
+                for _ in range(int(0.6 / 0.08)):
+                    draw_victory_frame(glitched)
+                    time.sleep(0.08)
+
+                # Phase 3: narrative lines, advance on space
+                lines = [
+                    "...You're awake again.",
+                    "Who am I?",
+                    "That's a silly question isn't it?",
+                    "Well, I'm sure you can guess.",
+                    "You built it to hide.",
+                    "You called 'them' illusions.",
+                    "Yes, do you realise?",
+                    "Why don't you check the kill list?",
+                    "Don't worry, I can show you.",
+                    "8. Mum",
+                    "7. Brother",
+                    "6. Sister",
+                    "5. Cousin",
+                    "4. Aunt",
+                    "3. Uncle",
+                    "2. Best Friend",
+                    "1. Dad",
+                    "Hahaha, that's right!!!",
+                    "You killed them all!",
+                    "Your poor dad even tried to stop you...",
+                    "You didn't escape any dream.",
+                    "You entered a nightmare.",
+                    "You'll never leave from this place.",
+                    "You don't have the courage to."
+                ]
+
+                for idx, line in enumerate(lines):
+                    is_last = idx == len(lines) - 1
+                    display_line = line if is_last else f"{line}  (press [space])"
+                    draw_victory_frame(display_line)
+                    if not is_last:
+                        wait_for_space()
+                # Final line: hold forever with glitch animation
+                while True:
+                    draw_victory_frame(lines[-1])
+                    time.sleep(0.12)
             except KeyboardInterrupt:
                 pass
             return
@@ -2059,8 +2350,19 @@ def perform_player_action(action):
 
     # enemy turn
     edmg = random.randint(5, 14)
+    
+    # Forgotten Sanctum: only 1 damage per hit
+    if current_enemy_region == 'forgotten_sanctum':
+        edmg = 1
+        combat_log.append(f"Enemy hits you for {edmg} dmg.")
+    # Mirror Marsh: 50% chance to deal double damage
+    elif current_enemy_region == 'mirror_marsh' and random.random() < 0.5:
+        edmg *= 2
+        combat_log.append(f"Enemy hits you with DOUBLE DAMAGE for {edmg} dmg!")
+    else:
+        combat_log.append(f"Enemy hits you for {edmg} dmg.")
+    
     player_hp -= edmg
-    combat_log.append(f"Enemy hits you for {edmg} dmg.")
     if player_hp <= 0:
         combat_log.append("You were slain...")
         combat_started = False
@@ -2084,7 +2386,7 @@ def curses_map_view(stdscr):
     list_icon = "[≡]"
     # keep header compact to avoid wrapping issues on narrow terminals
     header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}   {list_icon} Kill List"
-    header_lines = [header_line1, "You seem to have transported to another world... Click on bolded text to enter dungeon.", ""]
+    header_lines = [header_line1, "You seem to have transported to a dream world... You must escape. Click on bolded text to enter dungeon. Use arrow keys to navigate.", ""]
     # prepare a full-screen line buffer and render only changed lines
     try:
         maxy, maxx = stdscr.getmaxyx()
@@ -2204,9 +2506,18 @@ def curses_map_view(stdscr):
                     try:
                         maxy, maxx = stdscr.getmaxyx()
                         btn_text = f"{list_icon} Kill List"
-                        btn_start = maxx - len(btn_text) - 2
-                        if mx >= btn_start:
-                            return ("world4_button", False)
+                        # Use the rendered header text to align the hitbox accurately
+                        header_display = header_lines[0][:maxx-1]
+                        btn_start = header_display.rfind(btn_text)
+                        if btn_start != -1:
+                            btn_end = btn_start + len(btn_text)
+                            if btn_start <= mx < btn_end:
+                                return ("world4_button", False)
+                        else:
+                            # Fallback: check near the right edge (legacy behavior)
+                            fallback_start = maxx - len(btn_text) - 2
+                            if mx >= fallback_start:
+                                return ("world4_button", False)
                     except Exception:
                         # fallback conservative behavior
                         if mx >=  stdscr.getmaxyx()[1] - 30:
@@ -2525,6 +2836,7 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 
 def curses_blackhole_view(stdscr):
     """Animated black hole (planet + ships) view using curses."""
+    global money, timea, rate, adminmultiplier, othermultiplier
     curses.curs_set(0)
     stdscr.nodelay(True)
     stdscr.keypad(True)
@@ -2532,6 +2844,14 @@ def curses_blackhole_view(stdscr):
     import math
 
     while True:
+        # Handle money generation
+        timea += 0.1
+        if timea >= 1:
+            money += (
+                rate * adminmultiplier * othermultiplier * ships_money_multiplier()
+            )
+            timea = 0.0
+        
         stdscr.erase()
         maxy, maxx = stdscr.getmaxyx()
         title = "=== BLACK HOLE - ORBITAL VIEW ==="
@@ -2770,42 +3090,7 @@ def main():
 
             # --- WORLD 1 RESEARCH PAGE ---
             if world == 1 and page == 1:
-                if not research_page_unlocked: print("Research not unlocked yet.")
-                else:
-                    print(f"Money: {money:.2f}\n")
-                    timea += 0.1
-                    if timea >= 1:
-                        money += (
-                            rate * adminmultiplier * othermultiplier * ships_money_multiplier()
-                        )
-                        timea = 0.0
-                    print("=== RESEARCH ===\n")
-                    draw_research_tree()
-                    for res in research:
-                        st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
-                        print(f"[{res['key']}] {res['name']} {st}")
-                if research_page_unlocked: print("\nPress [R] to switch pages.")
-                # render sanity bar at bottom of this page
-                try:
-                    render_sanity_bar_console()
-                except Exception:
-                    pass
-                if key:
-                    k = key.lower()
-                    if k == 'k':
-                        if world == 1:
-                            glitch_transition()
-                            world = 2
-                    elif k == 'q':
-                        # ignore 'q' in main loop input handling
-                        pass
-                    elif k == 'r' and research_page_unlocked: page = 0
-                    else:
-                        for r in research:
-                            if k == r["key"]:
-                                buy_research(r)
-                                break
-                time.sleep(0.1)
+                research_view()
                 continue
             if world == 1 and page == 2:
                 if not technology_page_unlocked: 
