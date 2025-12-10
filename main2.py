@@ -3192,13 +3192,13 @@ def main():
             time.sleep(0.1)
 
     finally:
-        # Always attempt to disable mouse (if enabled), but ignore failures
+        # disable mouse
         try:
             disable_mouse()
         except Exception:
             pass
 
-        # Restore POSIX terminal settings only when we previously changed them
+        # hot garbage
         if not USING_WINDOWS and fd is not None and old_settings is not None:
             try:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
