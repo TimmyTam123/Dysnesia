@@ -28,8 +28,7 @@ except Exception:
 import locale
 locale.setlocale(locale.LC_ALL, '')
 
-# Debug: temporarily log raw keys to help diagnose missing admin key presses
-DEBUG_KEYLOG = True
+# (debug key logging removed)
 
 # --- CROSS-PLATFORM get_char ---
 USING_WINDOWS = sys.platform == "win32"
@@ -40,14 +39,7 @@ if USING_WINDOWS:
         if msvcrt.kbhit():
             ch = msvcrt.getch()
             try:
-                out = ch.decode()
-                try:
-                    if DEBUG_KEYLOG:
-                        with open("/tmp/dysnesia_keylog.txt", "a") as f:
-                            f.write(f"{time.time()}:WIN:{repr(out)}\n")
-                except Exception:
-                    pass
-                return out
+                return ch.decode()
             except Exception:
                 return None
         return None
@@ -58,17 +50,7 @@ else:
     def get_char():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
         if dr:
-            ch = sys.stdin.read(1)
-            try:
-                if DEBUG_KEYLOG:
-                    try:
-                        with open("/tmp/dysnesia_keylog.txt", "a") as f:
-                            f.write(f"{time.time()}:POSIX:{repr(ch)}\n")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            return ch
+            return sys.stdin.read(1)
         return None
 
 def flush_stdin(timeout=0.01):
@@ -2692,7 +2674,7 @@ def curses_blackhole_view(stdscr):
         time.sleep(0.08)
 
 def main():
-    global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked, blackhole_page_unlocked, blackhole_growth, ships_count, blackhole_unlock_cost, admin_ore_granted_msg
+    global world, money, timea, page, w1upgrades, depth, max_depth, ore_hp, ore_max_hp, ore_damage, auto_mine_damage, current_ore, ore_inventory, auto_miner_count, mining_page_unlocked, blackhole_page_unlocked, blackhole_growth, ships_count, blackhole_unlock_cost
     generate_city_layout()
     spawn_new_ore()  # Add this line
     # Configure terminal modes on POSIX only; Windows doesn't have termios/tty
@@ -2718,10 +2700,7 @@ def main():
             key = get_key()
             clear()
             
-            # Display admin message if set
-            if admin_ore_granted_msg:
-                print(f"\n{admin_ore_granted_msg}\n")
-                admin_ore_granted_msg = ""
+            # (debug admin messages removed)
             
             # global quit: pressing 'q' anywhere used to quit the main loop
             # User requested 'q' to do nothing special; ignore here.
@@ -3098,7 +3077,6 @@ def main():
                 if blackhole_page_unlocked:
                     print("Press [B] to open the Black Hole page.")
                 # (Orichalcum shards are intentionally hidden from main page display)
-                print("Press [M] to Admin-Unlock Black Hole (debug)")
                 try:
                     render_sanity_bar_console()
                 except Exception:
@@ -3252,15 +3230,7 @@ def main():
             # Handle keyboard input
             if key and key != '\x1b':
                 k = key.lower()
-                if k == 'z':
-                    # Global admin shortcut: give 50 of each ore regardless of page
-                    try:
-                        for ore_name in ore_inventory:
-                            ore_inventory[ore_name] += 50
-                        admin_ore_granted_msg = "[ADMIN] +50 ore granted!"
-                    except Exception:
-                        pass
-                    continue
+                # (removed global admin 'z' shortcut)
                 if k == 'q': 
                     pass
                 elif k == 'k':
@@ -3294,9 +3264,7 @@ def main():
                         else:
                             # not unlocked yet
                             pass
-                    elif k == 'm':
-                        # admin unlock (debug)
-                        blackhole_page_unlocked = True
+                    # (removed admin 'm' unlock)
                     else:
                         for upg in upgrades:
                             if k == upg["key"]:
@@ -3315,15 +3283,7 @@ def main():
                         if new_depth <= max_depth:
                             depth = new_depth
                             spawn_new_ore()
-                    elif k == 'z':
-                        # ADMIN BUTTON: give 50 of each ore when pressed in Mining
-                        print("key z pressed: granting admin ore...")
-                        try:
-                            for ore_name in ore_inventory:
-                                ore_inventory[ore_name] += 50
-                            admin_ore_granted_msg = "[ADMIN] +50 ore granted!"
-                        except Exception:
-                            print("Failed to grant admin ore.")
+                    # (removed mining admin 'z' shortcut)
                     else:
                         for tech in technology:
                             if k == tech["key"]: 
