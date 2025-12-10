@@ -373,7 +373,12 @@ def home_view():
     last_upgrades = None
     need_render = True
 
+    global home_needs_update, last_money_for_home
+    if last_money_for_home is None:
+        last_money_for_home = None
+
     while world == 1 and page == 0:
+        now = time.time()
         if need_render:
             clear()
             print(f"Money: {money:.2f}\n")
@@ -404,9 +409,12 @@ def home_view():
 
             last_money = money
             last_upgrades = w1upgrades
+            last_money_for_home = money
+            home_needs_update = False
+            last_home_render_time = now
             need_render = False
 
-        # update money timer (don't force redraw here; render only when value changed)
+        # update money timer locally; only mark for update when money actually changes
         timea += 0.1
         if timea >= 1:
             money += rate * adminmultiplier * othermultiplier
@@ -431,11 +439,16 @@ def home_view():
                 for upg in upgrades:
                     if k == upg["key"]:
                         buy_upgrade(upg)
-                        need_render = True
+                        # buy_upgrade will set `home_needs_update`
                         break
 
-        # re-render if money or upgrades changed externally
-        if money != last_money or w1upgrades != last_upgrades:
+        # re-render only if money increased or upgrades changed externally
+        # but debounce rapid consecutive renders using last_home_render_time
+        if home_needs_update:
+            need_render = True
+        elif (last_money_for_home is not None and money > last_money_for_home) and (time.time() - last_home_render_time) >= 0.5:
+            need_render = True
+        elif w1upgrades != last_upgrades:
             need_render = True
 
         time.sleep(0.1)
@@ -582,6 +595,10 @@ def ships_money_multiplier():
 # research rendering state
 last_money_for_research = None
 research_needs_update = True
+# home (city) rendering state
+last_money_for_home = None
+home_needs_update = True
+last_home_render_time = 0.0
 
 # --- SANITY / PROGRESSION STATE ---
 # Sanity accumulates from upgrades on a rotating active page. When full,
@@ -1556,6 +1573,11 @@ def buy_upgrade(upg):
     try:
         global research_needs_update
         research_needs_update = True
+        try:
+            global home_needs_update
+            home_needs_update = True
+        except Exception:
+            pass
     except Exception:
         pass
     if upg["count"] < upg["max"]:
@@ -2960,42 +2982,7 @@ def main():
 
             # --- WORLD 1 RESEARCH PAGE ---
             if world == 1 and page == 1:
-                if not research_page_unlocked: print("Research not unlocked yet.")
-                else:
-                    print(f"Money: {money:.2f}\n")
-                    timea += 0.1
-                    if timea >= 1:
-                        money += (
-                            rate * adminmultiplier * othermultiplier * ships_money_multiplier()
-                        )
-                        timea = 0.0
-                    print("=== RESEARCH ===\n")
-                    draw_research_tree()
-                    for res in research:
-                        st = "— COMPLETED" if res["purchased"] else f"| Cost: ${res['cost']}"
-                        print(f"[{res['key']}] {res['name']} {st}")
-                if research_page_unlocked: print("\nPress [R] to switch pages.")
-                # render sanity bar at bottom of this page
-                try:
-                    render_sanity_bar_console()
-                except Exception:
-                    pass
-                if key:
-                    k = key.lower()
-                    if k == 'k':
-                        if world == 1:
-                            glitch_transition()
-                            world = 2
-                    elif k == 'q':
-                        # ignore 'q' in main loop input handling
-                        pass
-                    elif k == 'r' and research_page_unlocked: page = 0
-                    else:
-                        for r in research:
-                            if k == r["key"]:
-                                buy_research(r)
-                                break
-                time.sleep(0.1)
+                research_view()
                 continue
             if world == 1 and page == 2:
                 if not technology_page_unlocked: 
