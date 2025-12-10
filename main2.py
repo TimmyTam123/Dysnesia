@@ -2100,8 +2100,8 @@ def perform_player_action(action):
             box_width = (len(victory_msg) + 10) * 5 // 2  # Half as wide
             box_height = 5 * 5 // 4  # Height reduced to ~6 rows
             box_left = (term_width - box_width) // 2 - 5  # Shifted left by 5
-            # Position box at 50% down the screen
-            box_top = int(term_height * 0.5) - (box_height // 2)
+            # Position box lower (70% down the screen)
+            box_top = int(term_height * 0.75) - (box_height // 2)
             
             try:
                 while True:
@@ -2193,7 +2193,7 @@ def curses_map_view(stdscr):
     list_icon = "[≡]"
     # keep header compact to avoid wrapping issues on narrow terminals
     header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}   {list_icon} Kill List"
-    header_lines = [header_line1, "You seem to have transported to another world... Click on bolded text to enter dungeon. Use arrow keys to navigate.", ""]
+    header_lines = [header_line1, "You seem to have transported to a dream world... You must escape. Click on bolded text to enter dungeon. Use arrow keys to navigate.", ""]
     # prepare a full-screen line buffer and render only changed lines
     try:
         maxy, maxx = stdscr.getmaxyx()
