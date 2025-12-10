@@ -306,12 +306,8 @@ def research_view():
             k = key.lower()
             if k == 'k':
                 if world == 1:
+                    glitch_transition()
                     world = 2
-                elif world == 2:
-                    world = 1
-                elif world == 3:
-                    world = 1
-                return
             elif k == 'q':
                 # ignore 'q' — do not quit the game
                 pass
@@ -507,8 +503,8 @@ def mining_view():
                 mine_ore()
                 need_render = True
             elif k == 'k':
+                glitch_transition()
                 world = 2
-                return
             elif k == 'q':
                 # ignore 'q' — do not quit
                 pass
@@ -675,6 +671,7 @@ def trigger_send_to_world2(cause=None, depth=None):
     """
     global world, awaiting_cycle_return, cycle_return_applied, last_send_cause
     try:
+        glitch_transition()
         world = 2
     except Exception:
         pass
@@ -814,6 +811,29 @@ for i, lbl in enumerate(click_labels.keys()):
 
 # track which regions have been defeated (so each enemy can only be killed once)
 defeated_regions = set()
+
+# Dungeon progression order (sequential unlock)
+dungeon_progression_order = [
+    'whispering_pines',
+    'silent_graveyard',
+    'hollowed_farmlands',
+    'sunken_marketplace',
+    'old_residential_district',
+    'mirror_marsh',
+    'obsidian_quarry',
+    'forgotten_sanctum'
+]
+
+# Track consecutive defeats for world switching (switch after every 2 defeats)
+consecutive_defeats = 0
+
+
+def get_next_available_dungeon():
+    """Return the normalized name of the next dungeon that can be entered based on progression."""
+    for region in dungeon_progression_order:
+        if region not in defeated_regions:
+            return region
+    return None  # All dungeons defeated
 
 def locate_labels_in_map(map_lines):
     """
@@ -1751,6 +1771,42 @@ def format_bar(value, maximum, width=20):
     return "[" + "#" * filled + " " * (width - filled) + "]"
 
 
+def glitch_transition():
+    """Display a glitch effect for 5 seconds when transitioning between worlds."""
+    glitch_chars = list('#$%*^&@!~+=<>?/|')
+    try:
+        import shutil
+        term_height, term_width = 24, 80
+        try:
+            term_width, term_height = shutil.get_terminal_size()
+        except Exception:
+            pass
+        
+        duration = 5.0
+        start = time.time()
+        frame_count = 0
+        
+        while time.time() - start < duration:
+            clear()
+            # Generate random glitch screen
+            for row in range(term_height - 1):
+                line = ''.join(random.choice(glitch_chars) for _ in range(term_width - 1))
+                print(line)
+            
+            # Flash by alternating between different patterns
+            time.sleep(0.08 if frame_count % 2 == 0 else 0.12)
+            frame_count += 1
+        
+        clear()
+    except Exception:
+        # Fallback: simple glitch
+        for _ in range(5):
+            clear()
+            print(''.join(random.choice(glitch_chars) for _ in range(80)))
+            time.sleep(0.5)
+        clear()
+
+
 # --- ENEMY DISPLAY HELPERS ---
 def random_error_name(length=8):
     """Return a short garbled string made of punctuation to simulate corruption."""
@@ -1910,11 +1966,11 @@ def draw_combat_ui():
 
     # action bar at bottom-ish
     print("\n" + "-" * width)
-    actions = f"[A] Attack   [H] Heal ({player_heals})   [U] Ability ({player_ability_charges})   [K] Back"
+    actions = f"[A] Attack   [H] Heal ({player_heals})   [U] Ability ({player_ability_charges})"
     print(actions.center(width))
 
 def perform_player_action(action):
-    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters
+    global enemy_hp, player_hp, player_heals, combat_log, player_ability_charges, combat_started, world, current_enemy_name, killed_monsters, consecutive_defeats
     if action == 'attack':
         dmg = random.randint(8, 15)
         enemy_hp -= dmg
@@ -1954,10 +2010,51 @@ def perform_player_action(action):
                     display_name = current_enemy_name or canonical
                 if display_name and display_name not in killed_monsters:
                     killed_monsters.insert(0, display_name)
+                
+                # Increment defeat counter
+                consecutive_defeats += 1
         except Exception:
             pass
         combat_started = False
-        world = 1
+        
+        # Check if Forgotten Sanctum was defeated - if so, trigger victory
+        if current_enemy_region == 'forgotten_sanctum':
+            # Trigger permanent glitch effect with victory message
+            glitch_chars = list('#$%*^&@!~+=<>?/|')
+            victory_msg = "You won"
+            terminal_width = 80
+            terminal_height = 30
+            victory_row = terminal_height // 2
+            try:
+                while True:
+                    print('\n' * 50)  # clear screen
+                    # Generate glitch lines before victory message
+                    for row in range(terminal_height):
+                        if row == victory_row:
+                            # Center the "You won" message on this row
+                            padding = (terminal_width - len(victory_msg)) // 2
+                            glitch_before = ''.join(random.choice(glitch_chars) for _ in range(padding))
+                            glitch_after = ''.join(random.choice(glitch_chars) for _ in range(terminal_width - padding - len(victory_msg)))
+                            print(glitch_before + victory_msg + glitch_after)
+                        else:
+                            # Regular glitch line
+                            line_length = random.randint(40, 80)
+                            glitch_line = ''.join(random.choice(glitch_chars) for _ in range(line_length))
+                            print(glitch_line)
+                    time.sleep(0.5)
+            except KeyboardInterrupt:
+                pass
+            return
+        
+        # Switch to world 1 after defeating pairs: 2nd, 4th, 6th dungeons
+        # OR immediately after defeating Obsidian Quarry (dungeon 7)
+        # This means: after (Whispering+Silent), (Hollowed+Sunken),
+        # (Old Res+Mirror), (Obsidian Quarry)
+        total_defeated = len(defeated_regions)
+        if total_defeated in [2, 4, 6] or current_enemy_region == 'obsidian_quarry':
+            world = 1
+            # Note: glitch transition will be shown when combat returns to main loop
+        # Otherwise stay in world 2 for next dungeon
         return
 
     # enemy turn
@@ -1967,7 +2064,7 @@ def perform_player_action(action):
     if player_hp <= 0:
         combat_log.append("You were slain...")
         combat_started = False
-        world = 1
+        # Don't set world here - let curses_combat handle death message
 
 
 def curses_map_view(stdscr):
@@ -1980,11 +2077,14 @@ def curses_map_view(stdscr):
     except Exception:
         pass
 
+    # Determine which dungeon is currently available
+    available_dungeon = get_next_available_dungeon()
+
     # ASCII list icon for World 4: [≡]
     list_icon = "[≡]"
     # keep header compact to avoid wrapping issues on narrow terminals
     header_line1 = f"=== WORLD 2: MAP ===   Level: {player_level}   {list_icon} Kill List"
-    header_lines = [header_line1, "Click on locations to enter the dungeon.", ""]
+    header_lines = [header_line1, "You seem to have transported to another world... Click on bolded text to enter dungeon.", ""]
     # prepare a full-screen line buffer and render only changed lines
     try:
         maxy, maxx = stdscr.getmaxyx()
@@ -2064,6 +2164,27 @@ def curses_map_view(stdscr):
     # render initial frame
     for y, ln in enumerate(new_lines):
         render_line(stdscr, y, ln)
+    
+    # Bold the available dungeon if it exists
+    if available_dungeon:
+        zone_info = absolute_zones.get(available_dungeon)
+        if zone_info:
+            z = zone_info
+            start_idx = z["row_start"] - (map_top + 1) - map_scroll
+            z_h = z["row_end"] - z["row_start"] + 1
+            z_w = z["col_end"] - z["col_start"] + 1
+            col0 = z["col_start"] - 1
+            for i in range(z_h):
+                line_idx = start_idx + i
+                if line_idx < 0 or line_idx >= visible_height:
+                    continue
+                y_pos = map_top + line_idx
+                if 0 <= y_pos < maxy:
+                    try:
+                        stdscr.chgat(y_pos, col0, z_w, curses.A_BOLD)
+                    except Exception:
+                        pass
+    
     present_frame(stdscr)
 
     while True:
@@ -2120,18 +2241,48 @@ def curses_map_view(stdscr):
                     if disp_row_start <= my+1 <= disp_row_end and z["col_start"] <= mx+1 <= z["col_end"]:
                         matched = (name, z)
                         break
-                # debug: show click coords and matched zone at bottom
-                try:
-                    maxy, maxx = stdscr.getmaxyx()
-                    dbg = f"Click at {mx},{my} -> {matched[0] if matched else 'NONE'}"
-                    # render to bottom line via render_line so diffing applies
-                    render_line(stdscr, maxy-1, dbg[:maxx-1])
-                except Exception:
-                    pass
+                
+                if matched:
+                    name, z = matched
+                    
+                    # Check if dungeon is already cleared
+                    if name in defeated_regions:
+                        try:
+                            maxy, maxx = stdscr.getmaxyx()
+                            location_display = name.replace('_', ' ').title()
+                            msg = f"{location_display} has been cleared."
+                            render_line(stdscr, maxy-1, msg[:maxx-1])
+                            present_frame(stdscr)
+                            time.sleep(1.0)
+                            # Clear message
+                            render_line(stdscr, maxy-1, '')
+                            present_frame(stdscr)
+                        except Exception:
+                            pass
+                        continue
+                    
+                    # Check if this is the available dungeon
+                    if available_dungeon and name != available_dungeon:
+                        # Not the available dungeon, show locked message
+                        try:
+                            maxy, maxx = stdscr.getmaxyx()
+                            location_display = name.replace('_', ' ').title()
+                            msg = f"{location_display} has not been unlocked"
+                            render_line(stdscr, maxy-1, msg[:maxx-1])
+                            present_frame(stdscr)
+                            time.sleep(1.0)
+                            # Clear message
+                            render_line(stdscr, maxy-1, '')
+                            present_frame(stdscr)
+                        except Exception:
+                            pass
+                        continue
+                
                 present_frame(stdscr)
                 if matched:
-                    # visually highlight the matched zone briefly
                     name, z = matched
+                    
+                    # visually highlight the matched zone briefly
                     # compute 0-based map_art index for zone start, adjusted for scroll
                     start_idx = z["row_start"] - (map_top + 1) - map_scroll
                     z_h = z["row_end"] - z["row_start"] + 1
@@ -2319,7 +2470,7 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 
         # actions
         if maxy - 2 >= 0:
-            new_lines[maxy-2] = "[A] Attack   [H] Heal   [U] Ability   [K] Back"[:maxx-1]
+            new_lines[maxy-2] = "[A] Attack   [H] Heal   [U] Ability"[:maxx-1]
 
         # render frame
         for y, ln in enumerate(new_lines):
@@ -2333,31 +2484,8 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
             perform_player_action('heal')
         elif ch in (ord('u'), ord('U')):
             perform_player_action('ability')
-        elif ch in (ord('k'), ord('K')):
-            # back to map/world 1
-            try:
-                globals()['world'] = 1
-            except Exception:
-                pass
-            return True
+        # Removed k key - player cannot exit combat manually
 
-
-        # (Previously there was a nested curses_blackhole_view defined here; removed)
-
-
-        
-
-
-        
-
-
-        
-        if ch in (ord('q'), 27):
-            try:
-                globals()['world'] = 1
-            except Exception:
-                pass
-            return True
         # small sleep to cap redraw/input polling rate
         try:
             time.sleep(0.03)
@@ -2366,15 +2494,33 @@ def curses_combat(stdscr, region, absolute_zones=None, map_top=0):
 
         # check combat end
         if not combat_started:
-            # display final messages until keypress
-            render_line(stdscr, maxy-3, "Combat ended. Press any key to continue...")
-            present_frame(stdscr)
-            stdscr.getch()
-            try:
-                globals()['world'] = 1
-            except Exception:
-                pass
-            return True
+            # Check if player died (HP <= 0)
+            if player_hp <= 0:
+                # Player died - show death message
+                msg = "You have died! Press [space] to restart."
+                render_line(stdscr, maxy-3, msg[:maxx-1])
+                present_frame(stdscr)
+                # Wait for space bar
+                while True:
+                    ch = stdscr.getch()
+                    if ch == ord(' '):
+                        break
+                # Return to world 1 (city)
+                world = 1
+                return True
+            else:
+                # Player won - display victory message with enemy name
+                enemy_display = get_enemy_display_name(current_enemy_region) if current_enemy_region else "Enemy"
+                msg = f"You have defeated {enemy_display}! Press [space] to exit."
+                render_line(stdscr, maxy-3, msg[:maxx-1])
+                present_frame(stdscr)
+                # Wait for space bar
+                while True:
+                    ch = stdscr.getch()
+                    if ch == ord(' '):
+                        break
+                # world is already set by defeat-counting logic in perform_player_action
+                return True
 
 
 def curses_blackhole_view(stdscr):
@@ -2648,11 +2794,8 @@ def main():
                     k = key.lower()
                     if k == 'k':
                         if world == 1:
+                            glitch_transition()
                             world = 2
-                        elif world == 2:
-                            world = 1
-                        elif world == 3:
-                            world = 1
                     elif k == 'q':
                         # ignore 'q' in main loop input handling
                         pass
@@ -2852,6 +2995,7 @@ def main():
                     if k == ' ':
                         mine_ore()
                     elif k == 'k':
+                        glitch_transition()
                         world = 2
                     elif k == 'q':
                         # ignore 'q' — do not quit
@@ -3000,6 +3144,7 @@ def main():
                     if k == 'r':
                         page = 0
                     elif k == 'k':
+                        glitch_transition()
                         world = 2
                     elif k == 'q':
                         # ignore 'q' — do not quit
@@ -3040,17 +3185,18 @@ def main():
                         # Clicked on World 4 button
                         world = 4
                     elif did_combat:
-                        # curses already ran combat and returned — go back to world 1
-                        world = 1
+                        # curses already ran combat and returned — check if should return to world 1
+                        # (perform_player_action already set world = 1 if needed)
+                        if world == 1:
+                            glitch_transition()
                     else:
                         # enter non-curses dungeon (fallback)
                         world = 3
                         region_name = region.replace("_", " ").upper()
                         print(f"\nYou clicked {region_name}. Entering Dungeon...")
                         time.sleep(0.3)
-                else:
-                    # canceled or closed map
-                    world = 1
+                # If map was canceled (returned None), stay in world 2
+                # Player can only return to world 1 through dungeon progression
 
             # --- DUNGEON / COMBAT VIEW ---
             if world == 3:
@@ -3119,12 +3265,7 @@ def main():
                     pass
                 elif k == 'k':
                     if world == 1:
-                        world = 2
-                    elif world == 2:
-                        world = 1
-                    elif world == 3:
-                        world = 1
-                    elif world == 4:
+                        glitch_transition()
                         world = 2
                 elif k == 'r' and research_page_unlocked and world == 1: 
                     page = 1
